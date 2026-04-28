@@ -1,0 +1,82 @@
+{
+  "current_account_index": 0,
+  "accounts": {
+    "/home/marcelo/.local/share/kiro-cli/data.sqlite3": {
+      "failures": 0,
+      "last_failure_time": 0.0,
+      "models_cached_at": 1777338211.115511,
+      "stats": {
+        "total_requests": 0,
+        "successful_requests": 0,
+        "failed_requests": 0
+      }
+    }
+  },
+  "model_to_accounts": {
+    "auto-kiro": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "claude-3.7-sonnet": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "claude-haiku-4.5": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "claude-opus-4.5": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "claude-opus-4.6": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "claude-sonnet-4": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "claude-sonnet-4.5": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "claude-sonnet-4.6": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "deepseek-3.2": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "glm-5": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "minimax-m2.1": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "minimax-m2.5": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    },
+    "qwen3-coder-next": {
+      "accounts": [
+        "/home/marcelo/.local/share/kiro-cli/data.sqlite3"
+      ]
+    }
+  }
+}

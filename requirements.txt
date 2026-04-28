@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+httpx
+loguru
+python-dotenv
+tiktoken
+pytest
+pytest-asyncio
+hypothesis
