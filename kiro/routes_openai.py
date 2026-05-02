@@ -1,7 +1,7 @@
  
 
 """
-FastAPI routes for AI Gateway.
+FastAPI routes for Open AI Gateway.
 
 Contains all API endpoints:
 - / and /health: Health check
@@ -35,6 +35,7 @@ from kiro.http_client import KiroHttpClient
 from kiro.utils import generate_conversation_id
 from kiro.config import WEB_SEARCH_ENABLED
 from kiro.mcp_tools import handle_native_web_search
+from kiro.gemini_provider import is_gemini_model, stream_gemini_response
 
 # Import debug_logger
 try:
@@ -82,7 +83,7 @@ async def root():
     """
     return {
         "status": "ok",
-        "message": "AI Gateway is running",
+        "message": "Open AI Gateway is running",
         "version": APP_VERSION
     }
 
@@ -214,7 +215,193 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
     if tool_results_modified > 0 or content_notices_added > 0:
         request_data.messages = modified_messages
         logger.info(f"Truncation recovery: modified {tool_results_modified} tool_result(s), added {content_notices_added} content notice(s)")
-    
+
+    # --- Gemini provider routing ---
+    if is_gemini_model(request_data.model):
+        logger.info(f"Routing to Gemini provider (model={request_data.model})")
+
+        # Convert OpenAI format to Anthropic-like dict expected by stream_gemini_response
+        system_parts: list = []
+        anthropic_messages: list = []
+        for msg in request_data.messages:
+            if msg.role == "system":
+                system_parts.append(msg.content if isinstance(msg.content, str) else "")
+                continue
+            if msg.role == "tool":
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": msg.tool_call_id or "",
+                        "content": msg.content if isinstance(msg.content, str) else "",
+                    }],
+                })
+                continue
+            if msg.role == "assistant" and msg.tool_calls:
+                content_blocks: list = []
+                if msg.content:
+                    content_blocks.append({"type": "text", "text": msg.content if isinstance(msg.content, str) else ""})
+                for tc in msg.tool_calls:
+                    fn = tc.get("function", {}) if isinstance(tc, dict) else getattr(tc, "function", {}) or {}
+                    if not isinstance(fn, dict):
+                        fn = fn.__dict__ if hasattr(fn, "__dict__") else {}
+                    args_raw = fn.get("arguments", "{}")
+                    try:
+                        args = json.loads(args_raw) if isinstance(args_raw, str) else args_raw
+                    except (json.JSONDecodeError, TypeError):
+                        args = {}
+                    content_blocks.append({
+                        "type": "tool_use",
+                        "id": tc.get("id", "") if isinstance(tc, dict) else getattr(tc, "id", ""),
+                        "name": fn.get("name", ""),
+                        "input": args,
+                    })
+                anthropic_messages.append({"role": "assistant", "content": content_blocks})
+                continue
+            anthropic_messages.append({"role": msg.role, "content": msg.content})
+
+        anthropic_tools: list = []
+        if request_data.tools:
+            for tool in request_data.tools:
+                fn = tool.get("function", {}) if isinstance(tool, dict) else getattr(tool, "function", None) or {}
+                if not isinstance(fn, dict):
+                    fn = fn.__dict__ if hasattr(fn, "__dict__") else {}
+                anthropic_tools.append({
+                    "name": fn.get("name", ""),
+                    "description": fn.get("description", ""),
+                    "input_schema": fn.get("parameters", {}),
+                })
+
+        request_dict = {
+            "model": request_data.model,
+            "messages": anthropic_messages,
+            "system": "\n".join(system_parts).strip(),
+            "tools": anthropic_tools,
+            "max_tokens": request_data.max_tokens,
+            "temperature": request_data.temperature,
+            "top_p": request_data.top_p,
+            "stream": request_data.stream,
+        }
+
+        if request_data.stream:
+            async def gemini_openai_stream_wrapper():
+                try:
+                    async for chunk in stream_gemini_response(request_dict, request_data.model):
+                        for line in chunk.splitlines():
+                            if not line.startswith("data: "):
+                                continue
+                            try:
+                                ev = json.loads(line[6:])
+                            except json.JSONDecodeError:
+                                continue
+                            ev_type = ev.get("type", "")
+                            if ev_type == "content_block_start":
+                                cb = ev.get("content_block", {})
+                                if cb.get("type") == "tool_use":
+                                    openai_chunk = {
+                                        "id": "chatcmpl-gemini",
+                                        "object": "chat.completion.chunk",
+                                        "created": 0,
+                                        "model": request_data.model,
+                                        "choices": [{"index": 0, "delta": {"tool_calls": [{"index": ev.get("index", 0), "id": cb.get("id", ""), "type": "function", "function": {"name": cb.get("name", ""), "arguments": ""}}]}, "finish_reason": None}],
+                                    }
+                                    yield f"data: {json.dumps(openai_chunk)}\n\n"
+                            elif ev_type == "content_block_delta":
+                                delta = ev.get("delta", {})
+                                if delta.get("type") == "text_delta":
+                                    openai_chunk = {
+                                        "id": "chatcmpl-gemini",
+                                        "object": "chat.completion.chunk",
+                                        "created": 0,
+                                        "model": request_data.model,
+                                        "choices": [{"index": 0, "delta": {"content": delta.get("text", "")}, "finish_reason": None}],
+                                    }
+                                    yield f"data: {json.dumps(openai_chunk)}\n\n"
+                                elif delta.get("type") == "input_json_delta":
+                                    openai_chunk = {
+                                        "id": "chatcmpl-gemini",
+                                        "object": "chat.completion.chunk",
+                                        "created": 0,
+                                        "model": request_data.model,
+                                        "choices": [{"index": 0, "delta": {"tool_calls": [{"index": ev.get("index", 0), "function": {"arguments": delta.get("partial_json", "")}}]}, "finish_reason": None}],
+                                    }
+                                    yield f"data: {json.dumps(openai_chunk)}\n\n"
+                            elif ev_type == "message_stop":
+                                openai_chunk = {
+                                    "id": "chatcmpl-gemini",
+                                    "object": "chat.completion.chunk",
+                                    "created": 0,
+                                    "model": request_data.model,
+                                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                                }
+                                yield f"data: {json.dumps(openai_chunk)}\n\n"
+                                yield "data: [DONE]\n\n"
+                except HTTPException as e:
+                    yield f"data: {json.dumps({'error': e.detail})}\n\n"
+                except Exception as e:
+                    logger.error(f"Gemini streaming error (OpenAI route): {e}", exc_info=True)
+                    yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'api_error'}})}\n\n"
+
+            return StreamingResponse(
+                gemini_openai_stream_wrapper(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+            )
+        else:
+            import uuid as _uuid
+            import time as _time
+            collected_text: list = []
+            tool_calls_map: dict = {}
+            finish_reason = "stop"
+
+            try:
+                async for chunk in stream_gemini_response(request_dict, request_data.model):
+                    for line in chunk.splitlines():
+                        if not line.startswith("data: "):
+                            continue
+                        try:
+                            ev = json.loads(line[6:])
+                        except json.JSONDecodeError:
+                            continue
+                        ev_type = ev.get("type", "")
+                        if ev_type == "content_block_start":
+                            cb = ev.get("content_block", {})
+                            if cb.get("type") == "tool_use":
+                                idx = ev.get("index", len(tool_calls_map))
+                                tool_calls_map[idx] = {
+                                    "id": cb.get("id", f"call_{_uuid.uuid4().hex[:8]}"),
+                                    "type": "function",
+                                    "function": {"name": cb.get("name", ""), "arguments": ""},
+                                }
+                        elif ev_type == "content_block_delta":
+                            delta = ev.get("delta", {})
+                            idx = ev.get("index", 0)
+                            if delta.get("type") == "text_delta":
+                                collected_text.append(delta.get("text", ""))
+                            elif delta.get("type") == "input_json_delta" and idx in tool_calls_map:
+                                tool_calls_map[idx]["function"]["arguments"] += delta.get("partial_json", "")
+                        elif ev_type == "message_delta":
+                            stop = ev.get("delta", {}).get("stop_reason", "end_turn")
+                            finish_reason = "tool_calls" if stop == "tool_use" else "stop"
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Gemini non-streaming error (OpenAI route): {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail=str(e))
+
+            message: dict = {"role": "assistant", "content": "".join(collected_text) or None}
+            if tool_calls_map:
+                message["tool_calls"] = [tool_calls_map[k] for k in sorted(tool_calls_map)]
+
+            return JSONResponse({
+                "id": f"chatcmpl-{_uuid.uuid4().hex[:24]}",
+                "object": "chat.completion",
+                "created": int(_time.time()),
+                "model": request_data.model,
+                "choices": [{"index": 0, "message": message, "finish_reason": finish_reason}],
+                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+            })
+
     # ==============================================================================
     # WebSearch Support - Path B: Auto-Injection (MCP Tool Emulation)
     # ==============================================================================

@@ -1,7 +1,7 @@
  
 
 """
-AI Gateway - OpenAI-compatible interface for Kiro API.
+Open AI Gateway - OpenAI-compatible interface for Kiro API.
 
 Application entry point. Creates FastAPI app and connects routes.
 
@@ -69,6 +69,7 @@ from kiro.model_resolver import ModelResolver
 from kiro.account_manager import AccountManager
 from kiro.routes_openai import router as openai_router
 from kiro.routes_anthropic import router as anthropic_router
+from kiro.routes_gemini import router as gemini_router
 from kiro.exceptions import validation_exception_handler
 from kiro.debug_middleware import DebugLoggerMiddleware
 
@@ -515,6 +516,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Error closing shared HTTP client: {e}")
 
+    # Close Gemini HTTP client
+    try:
+        from kiro.gemini_provider import close_gemini_client
+        await close_gemini_client()
+    except Exception as e:
+        logger.warning(f"Error closing Gemini HTTP client: {e}")
+
 
 # --- FastAPI Application ---
 app = FastAPI(
@@ -553,6 +561,9 @@ app.include_router(openai_router)
 
 # Anthropic-compatible API: /v1/messages
 app.include_router(anthropic_router)
+
+# Gemini-compatible API: /v1beta/models/{model}:generateContent
+app.include_router(gemini_router)
 
 
 # --- Uvicorn log config ---

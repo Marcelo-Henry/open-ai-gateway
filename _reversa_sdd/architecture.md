@@ -1,4 +1,4 @@
-# Arquitetura — AI Gateway
+# Arquitetura — Open AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 > Versão: 2.4-dev.10 | Linguagem: Python 3.10+ | Framework: FastAPI
@@ -7,7 +7,7 @@
 
 ## Visão Geral
 
-AI Gateway é um **proxy transparente** que expõe APIs compatíveis com OpenAI e Anthropic, traduzindo requisições para o formato nativo da Kiro API (Amazon Q Developer / AWS CodeWhisperer). O princípio central é intervenção mínima: o gateway corrige incompatibilidades de formato e adiciona funcionalidades opcionais, mas nunca altera a intenção do usuário.
+Open AI Gateway é um **proxy transparente** que expõe APIs compatíveis com OpenAI e Anthropic, traduzindo requisições para o formato nativo da Kiro API (Amazon Q Developer / AWS CodeWhisperer). O princípio central é intervenção mínima: o gateway corrige incompatibilidades de formato e adiciona funcionalidades opcionais, mas nunca altera a intenção do usuário.
 
 ---
 

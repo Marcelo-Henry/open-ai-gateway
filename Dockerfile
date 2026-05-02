@@ -1,4 +1,4 @@
-# AI Gateway - Docker Image
+# Open AI Gateway - Docker Image
 # Optimized single-stage build
 
 FROM python:3.10-slim

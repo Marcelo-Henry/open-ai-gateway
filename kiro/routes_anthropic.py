@@ -21,6 +21,7 @@ from loguru import logger
 
 from kiro.config import PROXY_API_KEY
 from kiro.codex_provider import is_codex_model, stream_codex_response
+from kiro.gemini_provider import is_gemini_model, stream_gemini_response
 from kiro.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicCountTokensRequest,
@@ -220,9 +221,93 @@ async def messages(
                 "usage": {"input_tokens": 0, "output_tokens": 0},
             })
 
+    # --- Gemini provider routing ---
+    if is_gemini_model(request_data.model):
+        logger.info(f"Routing to Gemini provider (model={request_data.model})")
+        request_dict = request_data.model_dump()
+
+        if request_data.stream:
+            async def gemini_stream_wrapper():
+                try:
+                    async for chunk in stream_gemini_response(request_dict, request_data.model):
+                        yield chunk
+                except HTTPException as e:
+                    yield f'event: error\ndata: {json.dumps(e.detail)}\n\n'
+                except Exception as e:
+                    logger.error(f"Gemini streaming error: {e}", exc_info=True)
+                    yield f'event: error\ndata: {json.dumps({"type": "error", "error": {"type": "api_error", "message": str(e)}})}\n\n'
+
+            return StreamingResponse(
+                gemini_stream_wrapper(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+            )
+        else:
+            collected_content_blocks = []
+            current_tool = None
+            current_text_parts = []
+            stop_reason = "end_turn"
+            message_id = f"msg_{uuid.uuid4().hex[:24]}"
+
+            try:
+                async for chunk in stream_gemini_response(request_dict, request_data.model):
+                    for line in chunk.splitlines():
+                        if not line.startswith("data: "):
+                            continue
+                        try:
+                            ev = json.loads(line[6:])
+                        except json.JSONDecodeError:
+                            continue
+                        ev_type = ev.get("type", "")
+                        if ev_type == "content_block_start":
+                            cb = ev.get("content_block", {})
+                            if cb.get("type") == "tool_use":
+                                current_tool = {"type": "tool_use", "id": cb.get("id", ""), "name": cb.get("name", ""), "input": {}}
+                                current_text_parts = []
+                            else:
+                                current_text_parts = []
+                        elif ev_type == "content_block_delta":
+                            delta = ev.get("delta", {})
+                            if delta.get("type") == "text_delta":
+                                current_text_parts.append(delta.get("text", ""))
+                            elif delta.get("type") == "input_json_delta" and current_tool:
+                                current_tool["_raw_input"] = current_tool.get("_raw_input", "") + delta.get("partial_json", "")
+                        elif ev_type == "content_block_stop":
+                            if current_tool:
+                                try:
+                                    current_tool["input"] = json.loads(current_tool.pop("_raw_input", "{}"))
+                                except json.JSONDecodeError:
+                                    current_tool["input"] = {}
+                                collected_content_blocks.append(current_tool)
+                                current_tool = None
+                                stop_reason = "tool_use"
+                            elif current_text_parts:
+                                text = "".join(current_text_parts)
+                                if text:
+                                    collected_content_blocks.append({"type": "text", "text": text})
+                                current_text_parts = []
+                        elif ev_type == "message_delta":
+                            stop_reason = ev.get("delta", {}).get("stop_reason", stop_reason) or stop_reason
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Gemini non-streaming error: {e}", exc_info=True)
+                raise HTTPException(status_code=500, detail={"type": "error", "error": {"type": "api_error", "message": str(e)}})
+
+            return JSONResponse(content={
+                "id": message_id,
+                "type": "message",
+                "role": "assistant",
+                "content": collected_content_blocks,
+                "model": request_data.model,
+                "stop_reason": stop_reason,
+                "stop_sequence": None,
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+            })
+
     # Note: prepare_new_request() and log_request_body() are now called by DebugLoggerMiddleware
     # This ensures debug logging works even for requests that fail Pydantic validation (422 errors)
-    
+
     # Check for truncation recovery opportunities
     from kiro.truncation_state import get_tool_truncation, get_content_truncation
     from kiro.truncation_recovery import generate_truncation_tool_result, generate_truncation_user_message

@@ -1,4 +1,4 @@
-# Code/Spec Matrix — AI Gateway
+# Code/Spec Matrix — Open AI Gateway
 
 > Escala de confiança: 🟢 Cobertura completa | 🟡 Cobertura parcial | — Sem spec correspondente
 

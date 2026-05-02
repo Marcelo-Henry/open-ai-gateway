@@ -4,11 +4,11 @@
 
 ```mermaid
 C4Context
-    title AI Gateway — Diagrama de Contexto
+    title Open AI Gateway — Diagrama de Contexto
 
     Person(dev, "Desenvolvedor / Agente AI", "Usa Claude Code, Cursor, ou outro cliente compatível com OpenAI/Anthropic API")
 
-    System(gateway, "AI Gateway", "Proxy FastAPI que traduz requisições OpenAI/Anthropic para o formato nativo da Kiro API. Gerencia autenticação, streaming, failover multi-account e enriquecimentos opcionais.")
+    System(gateway, "Open AI Gateway", "Proxy FastAPI que traduz requisições OpenAI/Anthropic para o formato nativo da Kiro API. Gerencia autenticação, streaming, failover multi-account e enriquecimentos opcionais.")
 
     System_Ext(kiro_api, "Kiro API (Amazon Q Developer)", "API da Amazon Q Developer / AWS CodeWhisperer. Processa requisições LLM via AWS Event Stream. Endpoint: q.{region}.amazonaws.com")
 

@@ -1,7 +1,7 @@
  
 
 """
-Codex CLI OAuth provider for AI Gateway.
+Codex CLI OAuth provider for Open AI Gateway.
 
 Translates Anthropic Messages API requests to the OpenAI Responses API
 format used by the private Codex endpoint, streams the response back

@@ -1,7 +1,7 @@
  
 
 """
-Exception handlers for AI Gateway.
+Exception handlers for Open AI Gateway.
 
 Contains functions for handling validation errors and other exceptions
 in a JSON-serialization compatible format.

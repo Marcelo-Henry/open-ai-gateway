@@ -1,7 +1,7 @@
  
 
 """
-Model metadata cache for AI Gateway.
+Model metadata cache for Open AI Gateway.
 
 Thread-safe storage for available model information
 with TTL and lazy loading support.

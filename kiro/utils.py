@@ -1,7 +1,7 @@
  
 
 """
-Utility functions for AI Gateway.
+Utility functions for Open AI Gateway.
 
 Contains functions for fingerprint generation, header formatting,
 and other common utilities.

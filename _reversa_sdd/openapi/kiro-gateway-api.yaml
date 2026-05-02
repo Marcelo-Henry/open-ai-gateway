@@ -1,6 +1,6 @@
 openapi: "3.1.0"
 info:
-  title: AI Gateway API
+  title: Open AI Gateway API
   description: |
     Proxy transparente que expõe APIs compatíveis com OpenAI e Anthropic para a Kiro API (Amazon Q Developer).
     Traduz requisições entre formatos e gerencia autenticação, streaming e failover multi-account.
