@@ -1,4 +1,4 @@
-# ERD Completo — AI Gateway
+# ERD Completo — Open AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

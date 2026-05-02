@@ -1,7 +1,7 @@
  
 
 """
-Unified Account System for AI Gateway.
+Unified Account System for Open AI Gateway.
 
 Manages multiple Kiro accounts with intelligent failover, sticky behavior,
 and circuit breaker pattern for reliability.

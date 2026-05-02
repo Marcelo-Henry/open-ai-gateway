@@ -1,4 +1,4 @@
-# Máquinas de Estado — AI Gateway
+# Máquinas de Estado — Open AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

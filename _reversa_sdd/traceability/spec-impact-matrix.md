@@ -1,4 +1,4 @@
-# Spec Impact Matrix — AI Gateway
+# Spec Impact Matrix — Open AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 >

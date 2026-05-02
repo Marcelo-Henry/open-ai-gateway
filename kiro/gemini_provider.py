@@ -1,6 +1,6 @@
 
 """
-Google Gemini provider for AI Gateway.
+Google Gemini provider for Open AI Gateway.
 
 Translates Anthropic Messages API requests to the Google Gemini
 generateContent / streamGenerateContent API, streams the response back
@@ -33,6 +33,47 @@ from kiro.gemini_auth import (
 
 # Base URL for the Gemini generativelanguage API (kept for backwards compat)
 _GEMINI_BASE_URL = PUBLIC_GEMINI_ENDPOINT
+
+# Shared HTTP client with connection pooling and HTTP/2
+_gemini_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_gemini_client() -> httpx.AsyncClient:
+    """
+    Return a shared httpx.AsyncClient with HTTP/2 and connection pooling.
+
+    Reuses the same client across requests to avoid per-request TCP/TLS
+    handshake overhead. The client is lazily created on first use.
+
+    Returns:
+        Shared httpx.AsyncClient instance
+    """
+    global _gemini_client
+    if _gemini_client is None or _gemini_client.is_closed:
+        _gemini_client = httpx.AsyncClient(
+            http2=True,
+            timeout=httpx.Timeout(connect=10, read=300, write=30, pool=10),
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=10,
+                keepalive_expiry=120,
+            ),
+        )
+        logger.info("Created shared Gemini HTTP client (HTTP/2, pooled)")
+    return _gemini_client
+
+
+async def close_gemini_client() -> None:
+    """
+    Close the shared Gemini HTTP client gracefully.
+
+    Should be called during application shutdown to release connections.
+    """
+    global _gemini_client
+    if _gemini_client and not _gemini_client.is_closed:
+        await _gemini_client.aclose()
+        _gemini_client = None
+        logger.info("Closed shared Gemini HTTP client")
 
 # Models available via Gemini API
 GEMINI_MODELS: List[Dict[str, str]] = [
@@ -543,167 +584,165 @@ async def stream_gemini_response(
     _MAX_429_RETRIES = 5
 
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=30, read=300, write=30, pool=30)
-        ) as client:
+        client = _get_gemini_client()
 
-            # Retry loop for 429 rate limits
-            for attempt in range(_MAX_429_RETRIES):
-                response_cm = client.stream("POST", url, json=final_payload, headers=headers)
-                response = await response_cm.__aenter__()
+        # Retry loop for 429 rate limits
+        for attempt in range(_MAX_429_RETRIES):
+            response_cm = client.stream("POST", url, json=final_payload, headers=headers)
+            response = await response_cm.__aenter__()
 
-                if response.status_code == 429:
+            if response.status_code == 429:
+                body = await response.aread()
+                await response_cm.__aexit__(None, None, None)
+
+                # Extract wait time from error message (e.g. "after 11s")
+                wait_secs = 15
+                try:
+                    body_text = body.decode("utf-8", errors="replace")
+                    match = re.search(r"after\s+(\d+)s", body_text)
+                    if match:
+                        wait_secs = int(match.group(1)) + 1
+                except Exception:
+                    pass
+
+                if attempt < _MAX_429_RETRIES - 1:
+                    logger.warning(
+                        f"Gemini 429 rate limit (attempt {attempt + 1}/{_MAX_429_RETRIES}), "
+                        f"waiting {wait_secs}s before retry..."
+                    )
+                    await asyncio.sleep(wait_secs)
+                    continue
+
+                # Exhausted retries
+                raise HTTPException(
+                    status_code=429,
+                    detail={
+                        "type": "error",
+                        "error": {
+                            "type": "rate_limit_error",
+                            "message": (
+                                "Gemini API rate limit reached after "
+                                f"{_MAX_429_RETRIES} retries. Please wait before retrying."
+                            ),
+                        },
+                    },
+                )
+
+            # Not a 429 — break out of retry loop
+            break
+
+        try:
+            if response.status_code == 401:
+                await response.aread()
+                raise HTTPException(
+                    status_code=401,
+                    detail={
+                        "type": "error",
+                        "error": {
+                            "type": "authentication_error",
+                            "message": (
+                                "Gemini API key is invalid or OAuth2 token expired. "
+                                "Check GEMINI_API_KEY or run `gemini auth login`."
+                            ),
+                        },
+                    },
+                )
+
+            if response.status_code >= 400:
+                try:
                     body = await response.aread()
-                    await response_cm.__aexit__(None, None, None)
+                    detail_text = body.decode("utf-8", errors="replace")
+                except Exception:
+                    detail_text = f"HTTP {response.status_code}"
 
-                    # Extract wait time from error message (e.g. "after 11s")
-                    wait_secs = 15
-                    try:
-                        body_text = body.decode("utf-8", errors="replace")
-                        match = re.search(r"after\s+(\d+)s", body_text)
-                        if match:
-                            wait_secs = int(match.group(1)) + 1
-                    except Exception:
-                        pass
-
-                    if attempt < _MAX_429_RETRIES - 1:
-                        logger.warning(
-                            f"Gemini 429 rate limit (attempt {attempt + 1}/{_MAX_429_RETRIES}), "
-                            f"waiting {wait_secs}s before retry..."
-                        )
-                        await asyncio.sleep(wait_secs)
-                        continue
-
-                    # Exhausted retries
-                    raise HTTPException(
-                        status_code=429,
-                        detail={
-                            "type": "error",
-                            "error": {
-                                "type": "rate_limit_error",
-                                "message": (
-                                    "Gemini API rate limit reached after "
-                                    f"{_MAX_429_RETRIES} retries. Please wait before retrying."
-                                ),
-                            },
+                logger.error(
+                    f"Gemini API returned HTTP {response.status_code}: "
+                    f"{detail_text[:200]}"
+                )
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail={
+                        "type": "error",
+                        "error": {
+                            "type": "api_error",
+                            "message": (
+                                f"Gemini API error (HTTP {response.status_code}): "
+                                f"{detail_text[:200]}"
+                            ),
                         },
-                    )
+                    },
+                )
 
-                # Not a 429 — break out of retry loop
-                break
+            # Success — now emit the stream opening event
+            yield _make_message_start_event(model, message_id)
+            message_start_emitted = True
 
-            try:
-                if response.status_code == 401:
-                    await response.aread()
-                    raise HTTPException(
-                        status_code=401,
-                        detail={
-                            "type": "error",
-                            "error": {
-                                "type": "authentication_error",
-                                "message": (
-                                    "Gemini API key is invalid or OAuth2 token expired. "
-                                    "Check GEMINI_API_KEY or run `gemini auth login`."
-                                ),
-                            },
-                        },
-                    )
+            # Parse Gemini SSE stream and translate to Anthropic format
+            async for line in response.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
 
-                if response.status_code >= 400:
-                    try:
-                        body = await response.aread()
-                        detail_text = body.decode("utf-8", errors="replace")
-                    except Exception:
-                        detail_text = f"HTTP {response.status_code}"
+                raw = line[len("data: "):]
+                if raw.strip() in ("", "[DONE]"):
+                    continue
 
-                    logger.error(
-                        f"Gemini API returned HTTP {response.status_code}: "
-                        f"{detail_text[:200]}"
-                    )
-                    raise HTTPException(
-                        status_code=response.status_code,
-                        detail={
-                            "type": "error",
-                            "error": {
-                                "type": "api_error",
-                                "message": (
-                                    f"Gemini API error (HTTP {response.status_code}): "
-                                    f"{detail_text[:200]}"
-                                ),
-                            },
-                        },
-                    )
+                try:
+                    chunk = json.loads(raw)
+                except json.JSONDecodeError:
+                    logger.debug(f"Gemini SSE: skipping non-JSON line: {raw[:80]}")
+                    continue
 
-                # Success — now emit the stream opening event
-                yield _make_message_start_event(model, message_id)
-                message_start_emitted = True
+                # Code Assist wraps the response: {"response": {...}, "traceId": "..."}
+                if "response" in chunk and "candidates" not in chunk:
+                    chunk = chunk["response"]
 
-                # Parse Gemini SSE stream and translate to Anthropic format
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
+                candidates = chunk.get("candidates", [])
+                if not candidates:
+                    continue
 
-                    raw = line[len("data: "):]
-                    if raw.strip() in ("", "[DONE]"):
-                        continue
+                candidate = candidates[0]
+                content = candidate.get("content", {})
+                parts = content.get("parts", [])
 
-                    try:
-                        chunk = json.loads(raw)
-                    except json.JSONDecodeError:
-                        logger.debug(f"Gemini SSE: skipping non-JSON line: {raw[:80]}")
-                        continue
+                for part in parts:
+                    if "text" in part:
+                        text = part["text"]
+                        if text:
+                            if not text_block_started:
+                                yield _make_text_block_start_event(block_index)
+                                text_block_started = True
+                            yield _make_text_delta_event(block_index, text)
 
-                    # Code Assist wraps the response: {"response": {...}, "traceId": "..."}
-                    if "response" in chunk and "candidates" not in chunk:
-                        chunk = chunk["response"]
+                    elif "functionCall" in part:
+                        func_call = part["functionCall"]
+                        tool_name = func_call.get("name", "")
+                        tool_args = func_call.get("args", {})
 
-                    candidates = chunk.get("candidates", [])
-                    if not candidates:
-                        continue
+                        has_tool_calls = True
 
-                    candidate = candidates[0]
-                    content = candidate.get("content", {})
-                    parts = content.get("parts", [])
-
-                    for part in parts:
-                        if "text" in part:
-                            text = part["text"]
-                            if text:
-                                if not text_block_started:
-                                    yield _make_text_block_start_event(block_index)
-                                    text_block_started = True
-                                yield _make_text_delta_event(block_index, text)
-
-                        elif "functionCall" in part:
-                            func_call = part["functionCall"]
-                            tool_name = func_call.get("name", "")
-                            tool_args = func_call.get("args", {})
-
-                            has_tool_calls = True
-
-                            # Close any open text block
-                            if text_block_started:
-                                yield _make_block_stop_event(block_index)
-                                block_index += 1
-                                text_block_started = False
-
-                            tool_id = f"toolu_{uuid.uuid4().hex[:24]}"
-                            logger.debug(f"Gemini tool call: {tool_name} (id={tool_id})")
-
-                            yield _make_tool_use_block_start_event(block_index, tool_id, tool_name)
-                            yield _make_tool_input_delta_event(
-                                block_index, json.dumps(tool_args)
-                            )
+                        # Close any open text block
+                        if text_block_started:
                             yield _make_block_stop_event(block_index)
                             block_index += 1
+                            text_block_started = False
 
-                    # Check finish reason
-                    finish_reason = candidate.get("finishReason", "")
-                    if finish_reason and finish_reason not in ("", "STOP"):
-                        logger.debug(f"Gemini finish reason: {finish_reason}")
+                        tool_id = f"toolu_{uuid.uuid4().hex[:24]}"
+                        logger.debug(f"Gemini tool call: {tool_name} (id={tool_id})")
 
-            finally:
-                await response_cm.__aexit__(None, None, None)
+                        yield _make_tool_use_block_start_event(block_index, tool_id, tool_name)
+                        yield _make_tool_input_delta_event(
+                            block_index, json.dumps(tool_args)
+                        )
+                        yield _make_block_stop_event(block_index)
+                        block_index += 1
+
+                # Check finish reason
+                finish_reason = candidate.get("finishReason", "")
+                if finish_reason and finish_reason not in ("", "STOP"):
+                    logger.debug(f"Gemini finish reason: {finish_reason}")
+
+        finally:
+            await response_cm.__aexit__(None, None, None)
 
     except HTTPException:
         raise

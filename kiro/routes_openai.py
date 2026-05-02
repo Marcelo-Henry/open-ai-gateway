@@ -1,7 +1,7 @@
  
 
 """
-FastAPI routes for AI Gateway.
+FastAPI routes for Open AI Gateway.
 
 Contains all API endpoints:
 - / and /health: Health check
@@ -83,7 +83,7 @@ async def root():
     """
     return {
         "status": "ok",
-        "message": "AI Gateway is running",
+        "message": "Open AI Gateway is running",
         "version": APP_VERSION
     }
 

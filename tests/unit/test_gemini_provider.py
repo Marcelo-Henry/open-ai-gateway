@@ -86,10 +86,6 @@ async def _run_gemini_stream(sse_lines: list, model: str = "gemini-2.5-pro") -> 
     mock_client = MagicMock()
     mock_client.stream = MagicMock(return_value=mock_stream_cm)
 
-    mock_client_cm = MagicMock()
-    mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
-    mock_client_cm.__aexit__ = AsyncMock(return_value=False)
-
     request_data = {
         "model": model,
         "messages": [{"role": "user", "content": "test"}],
@@ -97,7 +93,7 @@ async def _run_gemini_stream(sse_lines: list, model: str = "gemini-2.5-pro") -> 
 
     with patch("kiro.gemini_provider.get_gemini_auth_headers", AsyncMock(return_value={"x-goog-api-key": "test-key"})):
         with patch("kiro.gemini_provider.get_auth_type", return_value=GeminiAuthType.API_KEY):
-            with patch("kiro.gemini_provider.httpx.AsyncClient", return_value=mock_client_cm):
+            with patch("kiro.gemini_provider._get_gemini_client", return_value=mock_client):
                 chunks = []
                 async for chunk in stream_gemini_response(request_data, model):
                     chunks.append(chunk)
@@ -488,17 +484,13 @@ class TestStreamGeminiResponse:
         mock_client = MagicMock()
         mock_client.stream = MagicMock(return_value=mock_stream_cm)
 
-        mock_client_cm = MagicMock()
-        mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client_cm.__aexit__ = AsyncMock(return_value=False)
-
         from kiro.gemini_provider import stream_gemini_response
 
         request_data = {"model": "gemini-2.5-pro", "messages": [{"role": "user", "content": "hi"}]}
 
         with patch("kiro.gemini_provider.get_gemini_auth_headers", AsyncMock(return_value={"x-goog-api-key": "key"})):
             with patch("kiro.gemini_provider.get_auth_type", return_value=GeminiAuthType.API_KEY):
-                with patch("kiro.gemini_provider.httpx.AsyncClient", return_value=mock_client_cm):
+                with patch("kiro.gemini_provider._get_gemini_client", return_value=mock_client):
                     with pytest.raises(HTTPException) as exc_info:
                         async for _ in stream_gemini_response(request_data, "gemini-2.5-pro"):
                             pass
@@ -521,17 +513,13 @@ class TestStreamGeminiResponse:
         mock_client = MagicMock()
         mock_client.stream = MagicMock(return_value=mock_stream_cm)
 
-        mock_client_cm = MagicMock()
-        mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client_cm.__aexit__ = AsyncMock(return_value=False)
-
         from kiro.gemini_provider import stream_gemini_response
 
         request_data = {"model": "gemini-2.5-pro", "messages": [{"role": "user", "content": "hi"}]}
 
         with patch("kiro.gemini_provider.get_gemini_auth_headers", AsyncMock(return_value={"x-goog-api-key": "key"})):
             with patch("kiro.gemini_provider.get_auth_type", return_value=GeminiAuthType.API_KEY):
-                with patch("kiro.gemini_provider.httpx.AsyncClient", return_value=mock_client_cm):
+                with patch("kiro.gemini_provider._get_gemini_client", return_value=mock_client):
                     with pytest.raises(HTTPException) as exc_info:
                         async for _ in stream_gemini_response(request_data, "gemini-2.5-pro"):
                             pass
@@ -553,17 +541,13 @@ class TestStreamGeminiResponse:
         mock_client = MagicMock()
         mock_client.stream = MagicMock(return_value=mock_stream_cm)
 
-        mock_client_cm = MagicMock()
-        mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client_cm.__aexit__ = AsyncMock(return_value=False)
-
         from kiro.gemini_provider import stream_gemini_response
 
         request_data = {"model": "gemini-2.5-pro", "messages": [{"role": "user", "content": "hi"}]}
 
         with patch("kiro.gemini_provider.get_gemini_auth_headers", AsyncMock(return_value={"x-goog-api-key": "key"})):
             with patch("kiro.gemini_provider.get_auth_type", return_value=GeminiAuthType.API_KEY):
-                with patch("kiro.gemini_provider.httpx.AsyncClient", return_value=mock_client_cm):
+                with patch("kiro.gemini_provider._get_gemini_client", return_value=mock_client):
                     with pytest.raises(HTTPException) as exc_info:
                         async for _ in stream_gemini_response(request_data, "gemini-2.5-pro"):
                             pass
@@ -585,17 +569,13 @@ class TestStreamGeminiResponse:
         mock_client = MagicMock()
         mock_client.stream = MagicMock(return_value=mock_stream_cm)
 
-        mock_client_cm = MagicMock()
-        mock_client_cm.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client_cm.__aexit__ = AsyncMock(return_value=False)
-
         from kiro.gemini_provider import stream_gemini_response
 
         request_data = {"model": "gemini-2.5-pro", "messages": [{"role": "user", "content": "hi"}]}
 
         with patch("kiro.gemini_provider.get_gemini_auth_headers", AsyncMock(return_value={"x-goog-api-key": "key"})):
             with patch("kiro.gemini_provider.get_auth_type", return_value=GeminiAuthType.API_KEY):
-                with patch("kiro.gemini_provider.httpx.AsyncClient", return_value=mock_client_cm):
+                with patch("kiro.gemini_provider._get_gemini_client", return_value=mock_client):
                     with pytest.raises(HTTPException) as exc_info:
                         async for _ in stream_gemini_response(request_data, "gemini-2.5-pro"):
                             pass

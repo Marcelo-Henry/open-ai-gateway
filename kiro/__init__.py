@@ -1,7 +1,7 @@
  
 
 """
-AI Gateway - Proxy for Kiro API.
+Open AI Gateway - Proxy for Kiro API.
 
 This package provides a modular architecture for proxying
 OpenAI API requests to Kiro (AWS CodeWhisperer).

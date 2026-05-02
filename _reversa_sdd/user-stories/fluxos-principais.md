@@ -1,4 +1,4 @@
-# User Stories — AI Gateway
+# User Stories — Open AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

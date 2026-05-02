@@ -1,4 +1,4 @@
-# Relatório de Confiança — AI Gateway
+# Relatório de Confiança — Open AI Gateway
 
 > Gerado pelo Revisor em 2026-05-01
 > Revisão cruzada: não realizada (Codex não disponível nesta sessão)

@@ -1,4 +1,4 @@
-# Glossário de Domínio — AI Gateway
+# Glossário de Domínio — Open AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

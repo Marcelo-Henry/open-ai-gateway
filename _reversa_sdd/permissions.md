@@ -1,4 +1,4 @@
-# Modelo de Permissões e Autenticação — AI Gateway
+# Modelo de Permissões e Autenticação — Open AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 
@@ -6,7 +6,7 @@
 
 ## 1. Visão Geral
 
-O AI Gateway opera com dois níveis de autenticação independentes:
+O Open AI Gateway opera com dois níveis de autenticação independentes:
 
 1. **Autenticação do Cliente → Gateway** (`PROXY_API_KEY`): controla quem pode usar o gateway
 2. **Autenticação do Gateway → Kiro API** (Access Token): controla o acesso à Kiro API da Amazon
@@ -18,7 +18,7 @@ Cliente
   │  ou x-api-key: {PROXY_API_KEY}
   ▼
 ┌─────────────────────────────┐
-│       AI Gateway          │
+│       Open AI Gateway          │
 │   (verify_api_key /         │
 │    verify_anthropic_api_key)│
 └─────────────────────────────┘
