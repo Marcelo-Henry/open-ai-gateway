@@ -33,3 +33,7 @@ requests/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Reversa
+.reversa/config.user.toml
+specs/

@@ -1,0 +1,520 @@
+openapi: "3.1.0"
+info:
+  title: Kiro Gateway API
+  description: |
+    Proxy transparente que expõe APIs compatíveis com OpenAI e Anthropic para a Kiro API (Amazon Q Developer).
+    Traduz requisições entre formatos e gerencia autenticação, streaming e failover multi-account.
+  version: "2.4-dev.10"
+  license:
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.html
+
+servers:
+  - url: http://localhost:8000
+    description: Servidor local padrão
+
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: "PROXY_API_KEY configurada no .env"
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: "PROXY_API_KEY (formato Anthropic)"
+
+  schemas:
+    # ── OpenAI Models ──────────────────────────────────────────────
+    ChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: "#/components/schemas/ContentPart"
+        tool_calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolCall"
+        tool_call_id:
+          type: string
+
+    ContentPart:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [text, image_url]
+        text:
+          type: string
+        image_url:
+          type: object
+          properties:
+            url:
+              type: string
+
+    ToolCall:
+      type: object
+      required: [id, type, function]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [function]
+        function:
+          type: object
+          required: [name, arguments]
+          properties:
+            name:
+              type: string
+              maxLength: 64
+            arguments:
+              type: string
+
+    Tool:
+      type: object
+      required: [type, function]
+      properties:
+        type:
+          type: string
+          enum: [function]
+        function:
+          type: object
+          required: [name]
+          properties:
+            name:
+              type: string
+              maxLength: 64
+            description:
+              type: string
+            parameters:
+              type: object
+
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+          example: "claude-sonnet-4-6"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        stream:
+          type: boolean
+          default: false
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+        max_tokens:
+          type: integer
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tool"
+        tool_choice:
+          oneOf:
+            - type: string
+              enum: [none, auto, required]
+            - type: object
+
+    ChatCompletionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion]
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                $ref: "#/components/schemas/ChatMessage"
+              finish_reason:
+                type: string
+                enum: [stop, length, tool_calls, content_filter]
+        usage:
+          $ref: "#/components/schemas/Usage"
+
+    ModelList:
+      type: object
+      properties:
+        object:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              object:
+                type: string
+                enum: [model]
+              created:
+                type: integer
+              owned_by:
+                type: string
+
+    Usage:
+      type: object
+      properties:
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+
+    # ── Anthropic Models ───────────────────────────────────────────
+    AnthropicMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                $ref: "#/components/schemas/AnthropicContentBlock"
+
+    AnthropicContentBlock:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [text, image, tool_use, tool_result, thinking, redacted_thinking]
+        text:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        input:
+          type: object
+        tool_use_id:
+          type: string
+        content:
+          oneOf:
+            - type: string
+            - type: array
+        thinking:
+          type: string
+        data:
+          type: string
+
+    AnthropicTool:
+      type: object
+      required: [name, input_schema]
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        description:
+          type: string
+        input_schema:
+          type: object
+
+    AnthropicMessagesRequest:
+      type: object
+      required: [model, messages, max_tokens]
+      properties:
+        model:
+          type: string
+          example: "claude-sonnet-4-6"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnthropicMessage"
+        max_tokens:
+          type: integer
+          minimum: 1
+        system:
+          oneOf:
+            - type: string
+            - type: array
+        stream:
+          type: boolean
+          default: false
+        tools:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnthropicTool"
+        thinking:
+          type: object
+          properties:
+            type:
+              type: string
+              enum: [enabled, disabled]
+            budget_tokens:
+              type: integer
+        temperature:
+          type: number
+        top_p:
+          type: number
+        top_k:
+          type: integer
+
+    AnthropicResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [message]
+        role:
+          type: string
+          enum: [assistant]
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AnthropicContentBlock"
+        model:
+          type: string
+        stop_reason:
+          type: string
+          enum: [end_turn, max_tokens, tool_use, stop_sequence]
+        usage:
+          type: object
+          properties:
+            input_tokens:
+              type: integer
+            output_tokens:
+              type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+            code:
+              type: string
+
+paths:
+  /:
+    get:
+      summary: Health check básico
+      security: []
+      responses:
+        "200":
+          description: Servidor funcionando
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+
+  /health:
+    get:
+      summary: Health check detalhado
+      security: []
+      responses:
+        "200":
+          description: Status detalhado do gateway
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded]
+                  accounts:
+                    type: integer
+                  models:
+                    type: array
+                    items:
+                      type: string
+
+  /v1/models:
+    get:
+      summary: Lista modelos disponíveis
+      description: Agrega modelos de todas as accounts configuradas. Exclui modelos em HIDDEN_FROM_LIST.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Lista de modelos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelList"
+        "401":
+          description: API key inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/chat/completions:
+    post:
+      summary: Chat completions (OpenAI-compatible)
+      description: |
+        Endpoint principal para clientes OpenAI. Suporta streaming e non-streaming.
+        Modelos gpt-*/codex-* são roteados para o Codex Provider (ChatGPT).
+        Truncation Recovery aplicado automaticamente em tool_results.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionRequest"
+            examples:
+              simple:
+                summary: Requisição simples
+                value:
+                  model: "claude-sonnet-4-6"
+                  messages:
+                    - role: user
+                      content: "Hello!"
+                  stream: false
+              streaming:
+                summary: Requisição com streaming
+                value:
+                  model: "claude-opus-4-6"
+                  messages:
+                    - role: user
+                      content: "Explain quantum computing"
+                  stream: true
+                  max_tokens: 2048
+      responses:
+        "200":
+          description: Resposta de chat (JSON ou SSE stream)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionResponse"
+            text/event-stream:
+              schema:
+                type: string
+                description: "SSE stream com chunks delta no formato OpenAI"
+        "401":
+          description: API key inválida
+        "422":
+          description: Request inválido (validação Pydantic)
+        "503":
+          description: Nenhuma account disponível
+
+  /v1/messages:
+    post:
+      summary: Messages API (Anthropic-compatible)
+      description: |
+        Endpoint principal para clientes Anthropic. Suporta streaming e non-streaming.
+        Aceita x-api-key ou Authorization: Bearer para autenticação.
+        Web search auto-injetado se WEB_SEARCH_ENABLED=true.
+        Modelos gpt-*/codex-* roteados para Codex Provider.
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnthropicMessagesRequest"
+            examples:
+              simple:
+                summary: Requisição simples
+                value:
+                  model: "claude-sonnet-4-6"
+                  max_tokens: 1024
+                  messages:
+                    - role: user
+                      content: "Hello!"
+              with_thinking:
+                summary: Com extended thinking
+                value:
+                  model: "claude-opus-4-6"
+                  max_tokens: 4096
+                  thinking:
+                    type: enabled
+                    budget_tokens: 2048
+                  messages:
+                    - role: user
+                      content: "Solve this step by step..."
+      responses:
+        "200":
+          description: Resposta de mensagem (JSON ou SSE stream)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnthropicResponse"
+            text/event-stream:
+              schema:
+                type: string
+                description: "SSE stream com eventos no formato Anthropic"
+        "401":
+          description: API key inválida
+        "422":
+          description: Request inválido
+        "503":
+          description: Nenhuma account disponível
+
+  /v1/messages/count_tokens:
+    post:
+      summary: Conta tokens de uma requisição
+      description: Estima tokens de entrada usando tiktoken (cl100k_base). Não faz chamada à Kiro API.
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnthropicMessagesRequest"
+      responses:
+        "200":
+          description: Contagem de tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  input_tokens:
+                    type: integer
+                    example: 566
+        "401":
+          description: API key inválida

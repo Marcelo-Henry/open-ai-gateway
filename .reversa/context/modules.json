@@ -1,0 +1,331 @@
+{
+  "generated_at": "2026-05-01T00:00:00Z",
+  "modules": [
+    {
+      "name": "auth",
+      "path": "kiro/auth.py",
+      "purpose": "Gerenciamento do ciclo de vida de tokens de acesso para a Kiro API",
+      "primary_files": ["kiro/auth.py", "kiro/codex_auth.py"],
+      "functions": [
+        {"name": "get_access_token", "file": "kiro/auth.py", "params": [], "returns": "str", "confidence": "confirmed"},
+        {"name": "force_refresh", "file": "kiro/auth.py", "params": [], "returns": "str", "confidence": "confirmed"},
+        {"name": "_load_credentials_from_sqlite", "file": "kiro/auth.py", "params": ["db_path: str"], "returns": "None", "confidence": "confirmed"},
+        {"name": "_load_credentials_from_file", "file": "kiro/auth.py", "params": ["file_path: str"], "returns": "None", "confidence": "confirmed"},
+        {"name": "_refresh_token_kiro_desktop", "file": "kiro/auth.py", "params": [], "returns": "None", "confidence": "confirmed"},
+        {"name": "_refresh_token_aws_sso_oidc", "file": "kiro/auth.py", "params": [], "returns": "None", "confidence": "confirmed"},
+        {"name": "_save_credentials_to_sqlite", "file": "kiro/auth.py", "params": [], "returns": "None", "confidence": "confirmed"},
+        {"name": "is_token_expiring_soon", "file": "kiro/auth.py", "params": [], "returns": "bool", "confidence": "confirmed"},
+        {"name": "is_token_expired", "file": "kiro/auth.py", "params": [], "returns": "bool", "confidence": "confirmed"}
+      ],
+      "entities": [
+        {
+          "name": "AuthType",
+          "fields": [
+            {"name": "KIRO_DESKTOP", "type": "enum", "required": true},
+            {"name": "AWS_SSO_OIDC", "type": "enum", "required": true}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "KiroAuthManager",
+          "fields": [
+            {"name": "_refresh_token", "type": "Optional[str]", "required": false},
+            {"name": "_access_token", "type": "Optional[str]", "required": false},
+            {"name": "_expires_at", "type": "Optional[datetime]", "required": false},
+            {"name": "_client_id", "type": "Optional[str]", "required": false},
+            {"name": "_client_secret", "type": "Optional[str]", "required": false},
+            {"name": "_region", "type": "str", "required": true, "default": "us-east-1"},
+            {"name": "_auth_type", "type": "AuthType", "required": true},
+            {"name": "_lock", "type": "asyncio.Lock", "required": true}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {"description": "Token é renovado 600s antes da expiração (TOKEN_REFRESH_THRESHOLD)", "location": "kiro/auth.py:631", "confidence": "confirmed"},
+        {"description": "Presença de clientId+clientSecret determina AWS_SSO_OIDC, caso contrário KIRO_DESKTOP", "location": "kiro/auth.py:234", "confidence": "confirmed"},
+        {"description": "No modo SQLite, se refresh falhar com 400, usa access_token existente enquanto válido (degradação graciosa)", "location": "kiro/auth.py:900", "confidence": "confirmed"},
+        {"description": "SQLite write-back usa Read-Merge-Write para preservar campos desconhecidos do kiro-cli", "location": "kiro/auth.py:521", "confidence": "confirmed"},
+        {"description": "expires_at do SQLite tem nanosegundos (9 dígitos) — truncado para 6 antes do parse", "location": "kiro/auth.py:318", "confidence": "confirmed"}
+      ],
+      "dependencies": ["config", "utils"],
+      "complexity": "high"
+    },
+    {
+      "name": "account_manager",
+      "path": "kiro/account_manager.py",
+      "purpose": "Sistema de múltiplas contas com failover inteligente, Circuit Breaker e comportamento sticky",
+      "primary_files": ["kiro/account_manager.py", "kiro/account_errors.py"],
+      "functions": [
+        {"name": "load_credentials", "file": "kiro/account_manager.py", "params": [], "returns": "None", "confidence": "confirmed"},
+        {"name": "load_state", "file": "kiro/account_manager.py", "params": [], "returns": "None", "confidence": "confirmed"},
+        {"name": "_save_state", "file": "kiro/account_manager.py", "params": [], "returns": "None", "confidence": "confirmed"},
+        {"name": "_initialize_account", "file": "kiro/account_manager.py", "params": ["account_id: str"], "returns": "bool", "confidence": "confirmed"},
+        {"name": "get_next_account", "file": "kiro/account_manager.py", "params": ["model: str", "exclude_accounts: Optional[set]"], "returns": "Optional[Account]", "confidence": "confirmed"},
+        {"name": "report_success", "file": "kiro/account_manager.py", "params": ["account_id: str", "model: str"], "returns": "None", "confidence": "confirmed"},
+        {"name": "report_failure", "file": "kiro/account_manager.py", "params": ["account_id: str", "model: str", "error_type: ErrorType", "status_code: int", "reason: Optional[str]"], "returns": "None", "confidence": "confirmed"},
+        {"name": "get_all_available_models", "file": "kiro/account_manager.py", "params": [], "returns": "List[str]", "confidence": "confirmed"}
+      ],
+      "entities": [
+        {
+          "name": "Account",
+          "fields": [
+            {"name": "id", "type": "str", "required": true},
+            {"name": "auth_manager", "type": "Optional[KiroAuthManager]", "required": false},
+            {"name": "model_cache", "type": "Optional[ModelInfoCache]", "required": false},
+            {"name": "model_resolver", "type": "Optional[ModelResolver]", "required": false},
+            {"name": "failures", "type": "int", "required": true, "default": 0},
+            {"name": "last_failure_time", "type": "float", "required": true, "default": 0.0},
+            {"name": "models_cached_at", "type": "float", "required": true, "default": 0.0},
+            {"name": "stats", "type": "AccountStats", "required": true}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AccountStats",
+          "fields": [
+            {"name": "total_requests", "type": "int", "required": true, "default": 0},
+            {"name": "successful_requests", "type": "int", "required": true, "default": 0},
+            {"name": "failed_requests", "type": "int", "required": true, "default": 0}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {"description": "Circuit Breaker: backoff exponencial BASE*2^(failures-1), cap em 1 dia", "location": "kiro/account_manager.py:676", "confidence": "confirmed"},
+        {"description": "Retry probabilístico: 10% de chance de tentar conta em cooldown", "location": "kiro/account_manager.py:681", "confidence": "confirmed"},
+        {"description": "Single account: Circuit Breaker desabilitado — usuário vê erros reais", "location": "kiro/account_manager.py:619", "confidence": "confirmed"},
+        {"description": "Sticky global: _current_account_index atualizado apenas em sucesso", "location": "kiro/account_manager.py:741", "confidence": "confirmed"},
+        {"description": "State salvo atomicamente via tmp + rename", "location": "kiro/account_manager.py:344", "confidence": "confirmed"},
+        {"description": "ID de refresh_token é hash SHA-256 determinístico (não hash() Python)", "location": "kiro/account_manager.py:235", "confidence": "confirmed"}
+      ],
+      "dependencies": ["auth", "cache", "model_resolver", "http_client", "config", "utils"],
+      "complexity": "high"
+    },
+    {
+      "name": "routes",
+      "path": "kiro/",
+      "purpose": "Endpoints FastAPI — autenticação, validação, orquestração de failover e retorno de respostas",
+      "primary_files": ["kiro/routes_openai.py", "kiro/routes_anthropic.py"],
+      "functions": [
+        {"name": "chat_completions", "file": "kiro/routes_openai.py", "params": ["request: Request", "request_data: ChatCompletionRequest"], "returns": "StreamingResponse | JSONResponse", "confidence": "confirmed"},
+        {"name": "get_models", "file": "kiro/routes_openai.py", "params": ["request: Request"], "returns": "ModelList", "confidence": "confirmed"},
+        {"name": "messages", "file": "kiro/routes_anthropic.py", "params": ["request: Request", "request_data: AnthropicMessagesRequest"], "returns": "StreamingResponse | JSONResponse", "confidence": "confirmed"},
+        {"name": "verify_api_key", "file": "kiro/routes_openai.py", "params": ["auth_header: str"], "returns": "bool", "confidence": "confirmed"}
+      ],
+      "business_rules": [
+        {"description": "Truncation recovery: modifica tool_results de tool calls truncados antes de enviar à Kiro", "location": "kiro/routes_openai.py:184", "confidence": "confirmed"},
+        {"description": "Auto-inject web_search tool se WEB_SEARCH_ENABLED e tool não presente", "location": "kiro/routes_openai.py:240", "confidence": "confirmed"},
+        {"description": "MAX_ATTEMPTS = len(accounts) * 2 para garantir full circle com margem", "location": "kiro/routes_openai.py:285", "confidence": "confirmed"},
+        {"description": "profileArn enviado apenas para KIRO_DESKTOP (AWS SSO não usa e causa 403)", "location": "kiro/routes_openai.py:326", "confidence": "confirmed"},
+        {"description": "Streaming usa per-request client; non-streaming usa shared client", "location": "kiro/routes_openai.py:351", "confidence": "confirmed"}
+      ],
+      "dependencies": ["account_manager", "converters_openai", "converters_anthropic", "streaming_openai", "streaming_anthropic", "http_client", "mcp_tools", "codex_provider"],
+      "complexity": "high"
+    },
+    {
+      "name": "converters",
+      "path": "kiro/",
+      "purpose": "Tradução de formatos OpenAI/Anthropic para o formato unificado Kiro API",
+      "primary_files": ["kiro/converters_core.py", "kiro/converters_openai.py", "kiro/converters_anthropic.py"],
+      "functions": [
+        {"name": "build_kiro_payload", "file": "kiro/converters_core.py", "params": ["messages", "system_prompt", "model_id", "tools", "conversation_id", "profile_arn", "thinking_config"], "returns": "KiroPayloadResult", "confidence": "confirmed"},
+        {"name": "merge_adjacent_messages", "file": "kiro/converters_core.py", "params": ["messages: List[UnifiedMessage]"], "returns": "List[UnifiedMessage]", "confidence": "confirmed"},
+        {"name": "ensure_alternating_roles", "file": "kiro/converters_core.py", "params": ["messages: List[UnifiedMessage]"], "returns": "List[UnifiedMessage]", "confidence": "confirmed"},
+        {"name": "inject_thinking_tags", "file": "kiro/converters_core.py", "params": ["content: str", "thinking_config: ThinkingConfig"], "returns": "str", "confidence": "confirmed"},
+        {"name": "sanitize_json_schema", "file": "kiro/converters_core.py", "params": ["schema: Optional[Dict]"], "returns": "Dict", "confidence": "confirmed"},
+        {"name": "normalize_model_name", "file": "kiro/model_resolver.py", "params": ["name: str"], "returns": "str", "confidence": "confirmed"}
+      ],
+      "business_rules": [
+        {"description": "required:[] e additionalProperties removidos dos schemas (causam 400 na Kiro API)", "location": "kiro/converters_core.py:439", "confidence": "confirmed"},
+        {"description": "Tool names > 64 chars causam 400 — validados antes do envio", "location": "kiro/converters_core.py:560", "confidence": "confirmed"},
+        {"description": "Thinking tags NÃO injetadas quando há tools (quebra tool use)", "location": "kiro/converters_core.py:1552", "confidence": "confirmed"},
+        {"description": "Imagens vão em userInputMessage.images, NÃO em userInputMessageContext", "location": "kiro/converters_core.py:1356", "confidence": "confirmed"},
+        {"description": "Tool descriptions > TOOL_DESCRIPTION_MAX_LENGTH movidas para system prompt com referência", "location": "kiro/converters_core.py:493", "confidence": "confirmed"},
+        {"description": "reasoning_effort mapeado para % de max_tokens: none=0%, low=20%, medium=50%, high=80%, xhigh=95%", "location": "kiro/converters_openai.py:320", "confidence": "confirmed"}
+      ],
+      "dependencies": ["config", "model_resolver", "payload_guards"],
+      "complexity": "high"
+    },
+    {
+      "name": "streaming",
+      "path": "kiro/",
+      "purpose": "Parsing do AWS Event Stream da Kiro API e conversão para SSE OpenAI/Anthropic",
+      "primary_files": ["kiro/streaming_core.py", "kiro/streaming_openai.py", "kiro/streaming_anthropic.py"],
+      "functions": [
+        {"name": "parse_kiro_stream", "file": "kiro/streaming_core.py", "params": ["response: httpx.Response", "first_token_timeout: float", "enable_thinking_parser: bool"], "returns": "AsyncGenerator[KiroEvent, None]", "confidence": "confirmed"},
+        {"name": "stream_with_first_token_retry", "file": "kiro/streaming_core.py", "params": ["make_request", "stream_processor", "initial_response", "max_retries", "first_token_timeout", "on_http_error", "on_all_retries_failed"], "returns": "AsyncGenerator[str, None]", "confidence": "confirmed"},
+        {"name": "collect_stream_to_result", "file": "kiro/streaming_core.py", "params": ["response: httpx.Response"], "returns": "StreamResult", "confidence": "confirmed"}
+      ],
+      "business_rules": [
+        {"description": "First token timeout: se modelo não responder em FIRST_TOKEN_TIMEOUT segundos, cancela e retenta", "location": "kiro/streaming_core.py:154", "confidence": "confirmed"},
+        {"description": "prompt_tokens calculado via contextUsagePercentage: (pct/100)*max_input - completion_tokens", "location": "kiro/streaming_core.py:337", "confidence": "confirmed"},
+        {"description": "Bracket tool calls [Called func with args: {...}] parseados do conteúdo completo", "location": "kiro/streaming_core.py:326", "confidence": "confirmed"}
+      ],
+      "dependencies": ["parsers", "thinking_parser", "config"],
+      "complexity": "high"
+    },
+    {
+      "name": "parsers",
+      "path": "kiro/parsers.py",
+      "purpose": "Parser de AWS Event Stream binário — extrai eventos JSON, processa tool calls",
+      "primary_files": ["kiro/parsers.py"],
+      "functions": [
+        {"name": "feed", "file": "kiro/parsers.py", "params": ["chunk: bytes"], "returns": "List[Dict]", "confidence": "confirmed"},
+        {"name": "_finalize_tool_call", "file": "kiro/parsers.py", "params": [], "returns": "None", "confidence": "confirmed"},
+        {"name": "_diagnose_json_truncation", "file": "kiro/parsers.py", "params": ["json_str: str"], "returns": "Dict", "confidence": "confirmed"},
+        {"name": "deduplicate_tool_calls", "file": "kiro/parsers.py", "params": ["tool_calls: List[Dict]"], "returns": "List[Dict]", "confidence": "confirmed"},
+        {"name": "parse_bracket_tool_calls", "file": "kiro/parsers.py", "params": ["response_text: str"], "returns": "List[Dict]", "confidence": "confirmed"}
+      ],
+      "business_rules": [
+        {"description": "Kiro envia snapshots cumulativos de argumentos (não deltas) — detecção por prefixo", "location": "kiro/parsers.py:395", "confidence": "confirmed"},
+        {"description": "Deduplicação: por ID (mantém com mais args) + por name+args", "location": "kiro/parsers.py:151", "confidence": "confirmed"},
+        {"description": "JSON incompleto diagnosticado como truncamento se chaves/colchetes desbalanceados ou string não fechada", "location": "kiro/parsers.py:470", "confidence": "confirmed"}
+      ],
+      "dependencies": ["utils"],
+      "complexity": "medium"
+    },
+    {
+      "name": "model_resolver",
+      "path": "kiro/model_resolver.py",
+      "purpose": "Resolução dinâmica de nomes de modelos com normalização e passthrough otimista",
+      "primary_files": ["kiro/model_resolver.py", "kiro/cache.py"],
+      "functions": [
+        {"name": "normalize_model_name", "file": "kiro/model_resolver.py", "params": ["name: str"], "returns": "str", "confidence": "confirmed"},
+        {"name": "resolve", "file": "kiro/model_resolver.py", "params": ["external_model: str"], "returns": "ModelResolution", "confidence": "confirmed"},
+        {"name": "get_available_models", "file": "kiro/model_resolver.py", "params": [], "returns": "List[str]", "confidence": "confirmed"},
+        {"name": "get_model_id_for_kiro", "file": "kiro/model_resolver.py", "params": ["model_name: str", "hidden_models: Dict"], "returns": "str", "confidence": "confirmed"}
+      ],
+      "business_rules": [
+        {"description": "Nunca rejeita modelo desconhecido — passa para Kiro decidir (gateway, não gatekeeper)", "location": "kiro/model_resolver.py:326", "confidence": "confirmed"},
+        {"description": "Formato invertido claude-4.5-opus-high → claude-opus-4.5 REQUER sufixo para não confundir com claude-3.7-sonnet", "location": "kiro/model_resolver.py:153", "confidence": "confirmed"}
+      ],
+      "dependencies": ["cache"],
+      "complexity": "medium"
+    },
+    {
+      "name": "http_client",
+      "path": "kiro/http_client.py",
+      "purpose": "Cliente HTTP com retry automático, suporte a shared/per-request clients",
+      "primary_files": ["kiro/http_client.py"],
+      "functions": [
+        {"name": "request_with_retry", "file": "kiro/http_client.py", "params": ["method: str", "url: str", "json_data: Optional[dict]", "params: Optional[dict]", "stream: bool"], "returns": "httpx.Response", "confidence": "confirmed"},
+        {"name": "close", "file": "kiro/http_client.py", "params": [], "returns": "None", "confidence": "confirmed"}
+      ],
+      "business_rules": [
+        {"description": "Per-request client para streaming (evita CLOSE_WAIT leak issue #38)", "location": "kiro/http_client.py:227", "confidence": "confirmed"},
+        {"description": "FIRST_TOKEN_TIMEOUT NÃO aplicado aqui — aplicado em streaming_core.py via asyncio.wait_for", "location": "kiro/http_client.py:203", "confidence": "confirmed"},
+        {"description": "429/5xx retornados ao caller após exaustão (não lançam exceção) para classificação correta", "location": "kiro/http_client.py:303", "confidence": "confirmed"}
+      ],
+      "dependencies": ["auth", "utils", "network_errors", "config"],
+      "complexity": "medium"
+    },
+    {
+      "name": "truncation",
+      "path": "kiro/",
+      "purpose": "Detecção e recovery de respostas truncadas pela Kiro API",
+      "primary_files": ["kiro/truncation_recovery.py", "kiro/truncation_state.py"],
+      "business_rules": [
+        {"description": "Recovery APENAS quando truncamento é detectado (não preventivo)", "location": "kiro/truncation_recovery.py:36", "confidence": "confirmed"},
+        {"description": "Mensagem sintética não dá instruções específicas para evitar micro-steps", "location": "kiro/truncation_recovery.py:56", "confidence": "confirmed"}
+      ],
+      "dependencies": ["config"],
+      "complexity": "low"
+    },
+    {
+      "name": "payload_guards",
+      "path": "kiro/payload_guards.py",
+      "purpose": "Validação e trim de payload para respeitar limite de ~615KB da Kiro API",
+      "primary_files": ["kiro/payload_guards.py"],
+      "business_rules": [
+        {"description": "Trim em pares user/assistant (2 entradas) para manter consistência", "location": "kiro/payload_guards.py:146", "confidence": "confirmed"},
+        {"description": "toolResults órfãos após trim têm texto preservado inline com marcador", "location": "kiro/payload_guards.py:66", "confidence": "confirmed"}
+      ],
+      "dependencies": [],
+      "complexity": "low"
+    },
+    {
+      "name": "mcp_tools",
+      "path": "kiro/mcp_tools.py",
+      "purpose": "Suporte a web_search via MCP API da Kiro — Path A (nativo) e Path B (emulação)",
+      "primary_files": ["kiro/mcp_tools.py"],
+      "business_rules": [
+        {"description": "result.content[0].text é string JSON — requer parse duplo", "location": "kiro/mcp_tools.py:186", "confidence": "confirmed"},
+        {"description": "Path A bypassa completamente o /generateAssistantResponse", "location": "kiro/mcp_tools.py:590", "confidence": "confirmed"},
+        {"description": "publishedDate em milissegundos Unix (não segundos)", "location": "kiro/mcp_tools.py:249", "confidence": "confirmed"}
+      ],
+      "dependencies": ["auth", "tokenizer"],
+      "complexity": "medium"
+    },
+    {
+      "name": "codex_provider",
+      "path": "kiro/",
+      "purpose": "Provider alternativo via Codex CLI OAuth (ChatGPT) para modelos gpt-* e codex-*",
+      "primary_files": ["kiro/codex_provider.py", "kiro/codex_auth.py"],
+      "business_rules": [
+        {"description": "Sistema prompt buscado do GitHub na primeira chamada, cacheado em memória", "location": "kiro/codex_provider.py:92", "confidence": "confirmed"},
+        {"description": "reasoning.effort=xhigh usa summary=xhigh para máxima profundidade", "location": "kiro/codex_provider.py:331", "confidence": "confirmed"},
+        {"description": "Endpoint privado: chatgpt.com/backend-api/codex/responses (não API pública)", "location": "kiro/codex_provider.py:46", "confidence": "confirmed"}
+      ],
+      "dependencies": ["codex_auth", "config"],
+      "complexity": "medium"
+    },
+    {
+      "name": "config",
+      "path": "kiro/config.py",
+      "purpose": "Configurações centralizadas carregadas de variáveis de ambiente e .env",
+      "primary_files": ["kiro/config.py"],
+      "business_rules": [
+        {"description": "_get_raw_env_value lê .env sem processar escape sequences (fix para paths Windows)", "location": "kiro/config.py:30", "confidence": "confirmed"},
+        {"description": "FAKE_REASONING_ENABLED=true por padrão (opt-out, não opt-in)", "location": "kiro/config.py:290", "confidence": "confirmed"},
+        {"description": "ACCOUNT_SYSTEM=false por padrão (modo legado single-account)", "location": "kiro/config.py:430", "confidence": "confirmed"}
+      ],
+      "dependencies": [],
+      "complexity": "low"
+    },
+    {
+      "name": "errors",
+      "path": "kiro/",
+      "purpose": "Classificação e enriquecimento de erros de rede, Kiro API e sistema de contas",
+      "primary_files": ["kiro/network_errors.py", "kiro/kiro_errors.py", "kiro/exceptions.py", "kiro/account_errors.py"],
+      "business_rules": [
+        {"description": "FATAL (400,401,403,404,422): retorna imediatamente ao cliente sem failover", "location": "kiro/account_errors.py", "confidence": "confirmed"},
+        {"description": "RECOVERABLE (429,500,502,503,504): tenta próxima conta", "location": "kiro/account_errors.py", "confidence": "confirmed"},
+        {"description": "Improperly formed request é erro vago — enriquecido com diagnóstico baseado em reason", "location": "kiro/kiro_errors.py", "confidence": "confirmed"}
+      ],
+      "dependencies": [],
+      "complexity": "low"
+    },
+    {
+      "name": "debug",
+      "path": "kiro/",
+      "purpose": "Sistema de debug logging com captura de request/response completos",
+      "primary_files": ["kiro/debug_logger.py", "kiro/debug_middleware.py"],
+      "business_rules": [
+        {"description": "Middleware captura request body ANTES da validação Pydantic para logar erros 422", "location": "kiro/debug_middleware.py", "confidence": "confirmed"},
+        {"description": "Modo errors: salva apenas para 4xx/5xx; modo all: salva tudo", "location": "kiro/debug_logger.py", "confidence": "confirmed"}
+      ],
+      "dependencies": ["config"],
+      "complexity": "low"
+    },
+    {
+      "name": "tokenizer",
+      "path": "kiro/tokenizer.py",
+      "purpose": "Contagem de tokens via tiktoken com correção para modelos Claude",
+      "primary_files": ["kiro/tokenizer.py"],
+      "business_rules": [
+        {"description": "Correção Claude: multiplica por 1.1 (Claude usa ~10% mais tokens que GPT)", "location": "kiro/tokenizer.py", "confidence": "inferred"}
+      ],
+      "dependencies": [],
+      "complexity": "low"
+    },
+    {
+      "name": "utils",
+      "path": "kiro/utils.py",
+      "purpose": "Utilitários gerais: geração de IDs, fingerprint de máquina, headers Kiro",
+      "primary_files": ["kiro/utils.py"],
+      "dependencies": [],
+      "complexity": "low"
+    }
+  ]
+}

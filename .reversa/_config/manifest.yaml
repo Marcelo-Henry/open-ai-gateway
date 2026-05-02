@@ -1,0 +1,22 @@
+installation:
+  version: 1.2.14
+  installDate: 2026-05-02T00:39:52.116Z
+  lastUpdated: 2026-05-02T00:39:52.116Z
+
+engines:
+  - claude-code
+  - amazon-q
+
+agents:
+  - reversa
+  - reversa-scout
+  - reversa-archaeologist
+  - reversa-detective
+  - reversa-architect
+  - reversa-writer
+  - reversa-reviewer
+  - reversa-visor
+  - reversa-data-master
+  - reversa-design-system
+  - reversa-agents-help
+  - reversa-reconstructor

@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-05-01T00:00:00Z",
+  "project_root": "/home/marcelo/codex-gateway",
+  "languages": [
+    { "name": "Python", "extensions": [".py"], "file_count": 40 }
+  ],
+  "primary_language": "Python",
+  "frameworks": [
+    { "name": "FastAPI", "version": "latest", "source": "requirements.txt" },
+    { "name": "Uvicorn", "version": "latest", "source": "requirements.txt" },
+    { "name": "httpx", "version": "latest", "source": "requirements.txt" },
+    { "name": "loguru", "version": "latest", "source": "requirements.txt" },
+    { "name": "tiktoken", "version": "latest", "source": "requirements.txt" },
+    { "name": "pytest", "version": "latest", "source": "requirements.txt" },
+    { "name": "hypothesis", "version": "latest", "source": "requirements.txt" }
+  ],
+  "package_manager": "pip",
+  "entry_points": [
+    { "path": "main.py", "type": "app_entry" },
+    { "path": "kiro/routes_openai.py", "type": "route_module" },
+    { "path": "kiro/routes_anthropic.py", "type": "route_module" }
+  ],
+  "config_files": [
+    ".env.example",
+    "credentials.json",
+    "state.json",
+    "pytest.ini",
+    "Dockerfile",
+    "docker-compose.yml"
+  ],
+  "ci_cd": [],
+  "docker": {
+    "dockerfile": "Dockerfile",
+    "compose": "docker-compose.yml"
+  },
+  "database_hints": [],
+  "test_framework": "pytest + pytest-asyncio + hypothesis",
+  "test_file_count": 3,
+  "modules": [
+    "auth",
+    "account_manager",
+    "routes",
+    "converters",
+    "streaming",
+    "parsers",
+    "models",
+    "model_resolver",
+    "http_client",
+    "config",
+    "errors",
+    "debug",
+    "codex_provider",
+    "payload_guards",
+    "mcp_tools",
+    "truncation",
+    "tokenizer",
+    "utils"
+  ],
+  "total_files": 40
+}

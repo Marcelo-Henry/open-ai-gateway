@@ -1,0 +1,94 @@
+{
+  "version": "1.2.14",
+  "project": "codex-gateway",
+  "user_name": "Marcelo",
+  "chat_language": "pt-br",
+  "doc_language": "Português",
+  "answer_mode": "chat",
+  "doc_level": "completo",
+  "output_folder": "specs",
+  "phase": "concluido",
+  "completed": ["reconhecimento", "escavacao", "detective", "arquiteto", "geracao", "revisao"],
+  "pending": [],
+  "checkpoints": {
+    "reconhecimento": {
+      "completed_at": "2026-05-01T00:00:00Z",
+      "artifacts": ["_reversa_sdd/inventory.md", "_reversa_sdd/dependencies.md", ".reversa/context/surface.json"],
+      "summary": "18 módulos identificados, linguagem Python, framework FastAPI, 40 arquivos .py, 3 testes unitários"
+    },
+    "escavacao": {
+      "completed_at": "2026-05-01T01:00:00Z",
+      "artifacts": [
+        "_reversa_sdd/code-analysis.md",
+        "_reversa_sdd/data-dictionary.md",
+        "_reversa_sdd/flowcharts/auth.md",
+        "_reversa_sdd/flowcharts/request-flow.md",
+        "_reversa_sdd/flowcharts/converters.md",
+        ".reversa/context/modules.json"
+      ],
+      "summary": "18 módulos analisados em profundidade, 50+ regras de negócio extraídas, 3 flowcharts Mermaid gerados"
+    },
+    "detective": {
+      "completed_at": "2026-05-01T02:00:00Z",
+      "artifacts": [
+        "_reversa_sdd/domain.md",
+        "_reversa_sdd/state-machines.md",
+        "_reversa_sdd/permissions.md",
+        "_reversa_sdd/adrs/001-per-request-http-client.md",
+        "_reversa_sdd/adrs/002-truncation-recovery.md",
+        "_reversa_sdd/adrs/003-message-role-normalization.md",
+        "_reversa_sdd/adrs/004-sqlite-read-merge-write.md",
+        "_reversa_sdd/adrs/005-dynamic-region-detection.md",
+        "_reversa_sdd/adrs/006-model-passthrough.md",
+        "_reversa_sdd/adrs/007-fake-reasoning-injection.md"
+      ],
+      "summary": "Glossário de domínio com 20 entidades e 20 regras de negócio, 6 máquinas de estado, modelo de permissões completo, 7 ADRs retroativos"
+    },
+    "arquiteto": {
+      "completed_at": "2026-05-01T03:00:00Z",
+      "artifacts": [
+        "_reversa_sdd/architecture.md",
+        "_reversa_sdd/c4-context.md",
+        "_reversa_sdd/c4-containers.md",
+        "_reversa_sdd/c4-components.md",
+        "_reversa_sdd/erd-complete.md",
+        "_reversa_sdd/traceability/spec-impact-matrix.md"
+      ],
+      "summary": "Arquitetura completa: C4 em 3 níveis, ERD com 11 entidades, Spec Impact Matrix com 19 componentes, 8 dívidas técnicas identificadas"
+    },
+    "geracao": {
+      "completed_at": "2026-05-01T04:00:00Z",
+      "artifacts": [
+        "_reversa_sdd/sdd/auth.md",
+        "_reversa_sdd/sdd/account-manager.md",
+        "_reversa_sdd/sdd/converters-core.md",
+        "_reversa_sdd/sdd/streaming-core.md",
+        "_reversa_sdd/sdd/parsers.md",
+        "_reversa_sdd/sdd/http-client.md",
+        "_reversa_sdd/sdd/routes.md",
+        "_reversa_sdd/sdd/model-resolver.md",
+        "_reversa_sdd/sdd/thinking-parser.md",
+        "_reversa_sdd/sdd/mcp-codex.md",
+        "_reversa_sdd/openapi/kiro-gateway-api.yaml",
+        "_reversa_sdd/user-stories/fluxos-principais.md",
+        "_reversa_sdd/traceability/code-spec-matrix.md"
+      ],
+      "summary": "9 SDDs de componente, 1 OpenAPI spec, 10 user stories em 4 épicos, code-spec matrix com 75% de cobertura estimada"
+    },
+    "revisao": {
+      "completed_at": "2026-05-01T05:00:00Z",
+      "artifacts": [
+        "_reversa_sdd/confidence-report.md",
+        "_reversa_sdd/questions.md",
+        "_reversa_sdd/gaps.md"
+      ],
+      "summary": "8 reclassificações aplicadas (🟡→🟢), 6 lacunas pendentes, confiança geral 81%, 6 perguntas para validação humana"
+    }
+  },
+  "engines": ["claude-code", "amazon-q"],
+  "agents": [
+    "reversa", "reversa-scout", "reversa-archaeologist", "reversa-detective",
+    "reversa-architect", "reversa-writer", "reversa-reviewer", "reversa-visor",
+    "reversa-data-master", "reversa-design-system", "reversa-agents-help", "reversa-reconstructor"
+  ]
+}
