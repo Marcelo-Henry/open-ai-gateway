@@ -51,5 +51,6 @@
   ".reversa/config.user.toml": "59a1a98ae308ad6799e831e51fad9cc2af8941ef3cc08712c361544224ef5561",
   ".reversa/plan.md": "e2b7bbc4b2c43a649f9161735e8c0fad62c62096b2b55a4d15f0bd3e4288a6fc",
   ".reversa/version": "266b24a798b92b2f16157521a278cc430a125e8d78bd6518d66d8078335ec849",
-  ".reversa/_config/manifest.yaml": "9739d253961f69504db9904c77ebb1ec1506856362756a12c337ba602366af17"
+  ".reversa/_config/manifest.yaml": "9739d253961f69504db9904c77ebb1ec1506856362756a12c337ba602366af17",
+  ".kiro/steering/reversa.md": "1853d6b346d659fea9745728e81cca15f307d535046addbc71789ffad88233fd"
 }

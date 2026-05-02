@@ -6,14 +6,25 @@
   "doc_language": "Português",
   "answer_mode": "chat",
   "doc_level": "completo",
-  "output_folder": "specs",
+  "output_folder": "_reversa_sdd",
   "phase": "concluido",
-  "completed": ["reconhecimento", "escavacao", "detective", "arquiteto", "geracao", "revisao"],
+  "completed": [
+    "reconhecimento",
+    "escavacao",
+    "detective",
+    "arquiteto",
+    "geracao",
+    "revisao"
+  ],
   "pending": [],
   "checkpoints": {
     "reconhecimento": {
       "completed_at": "2026-05-01T00:00:00Z",
-      "artifacts": ["_reversa_sdd/inventory.md", "_reversa_sdd/dependencies.md", ".reversa/context/surface.json"],
+      "artifacts": [
+        "_reversa_sdd/inventory.md",
+        "_reversa_sdd/dependencies.md",
+        ".reversa/context/surface.json"
+      ],
       "summary": "18 módulos identificados, linguagem Python, framework FastAPI, 40 arquivos .py, 3 testes unitários"
     },
     "escavacao": {
@@ -85,10 +96,25 @@
       "summary": "8 reclassificações aplicadas (🟡→🟢), 6 lacunas pendentes, confiança geral 81%, 6 perguntas para validação humana"
     }
   },
-  "engines": ["claude-code", "amazon-q"],
+  "engines": [
+    "claude-code",
+    "kiro"
+  ],
   "agents": [
-    "reversa", "reversa-scout", "reversa-archaeologist", "reversa-detective",
-    "reversa-architect", "reversa-writer", "reversa-reviewer", "reversa-visor",
-    "reversa-data-master", "reversa-design-system", "reversa-agents-help", "reversa-reconstructor"
+    "reversa",
+    "reversa-scout",
+    "reversa-archaeologist",
+    "reversa-detective",
+    "reversa-architect",
+    "reversa-writer",
+    "reversa-reviewer",
+    "reversa-visor",
+    "reversa-data-master",
+    "reversa-design-system",
+    "reversa-agents-help",
+    "reversa-reconstructor"
+  ],
+  "created_files": [
+    ".kiro/steering/reversa.md"
   ]
 }
