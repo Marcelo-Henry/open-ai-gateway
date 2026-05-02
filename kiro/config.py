@@ -477,6 +477,22 @@ FAKE_REASONING_INITIAL_BUFFER_SIZE: int = int(os.getenv("FAKE_REASONING_INITIAL_
 
 
 # ==================================================================================================
+# Google Gemini Provider Settings
+# ==================================================================================================
+
+# Google Gemini API key (from https://aistudio.google.com/app/apikey)
+# When set, takes priority over OAuth2 credentials file.
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+
+# Path to Gemini CLI OAuth2 credentials file (created by `gemini auth login`)
+GEMINI_AUTH_FILE: str = os.getenv("GEMINI_AUTH_FILE", "~/.gemini/oauth_creds.json")
+
+# Set to false to disable the Gemini provider even if credentials are configured.
+_GEMINI_ENABLED_RAW: str = os.getenv("GEMINI_ENABLED", "true").lower()
+GEMINI_ENABLED: bool = _GEMINI_ENABLED_RAW not in ("false", "0", "no", "disabled", "off")
+
+
+# ==================================================================================================
 # Payload Size Guard Settings
 # ==================================================================================================
 
