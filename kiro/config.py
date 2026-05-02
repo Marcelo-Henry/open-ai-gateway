@@ -1,7 +1,7 @@
  
 
 """
-Kiro Gateway Configuration.
+AI Gateway Configuration.
 
 Centralized storage for all settings, constants, and mappings.
 Loads environment variables and provides typed access to them.
@@ -554,7 +554,7 @@ STATE_SAVE_INTERVAL_SECONDS: int = int(os.getenv("STATE_SAVE_INTERVAL_SECONDS", 
 # ==================================================================================================
 
 APP_VERSION: str = "2.4-dev.10"
-APP_TITLE: str = "Kiro Gateway"
+APP_TITLE: str = "AI Gateway"
 APP_DESCRIPTION: str = "Proxy gateway for Kiro API (Amazon Q Developer / AWS CodeWhisperer). OpenAI and Anthropic compatible. Made by @jwadow"
 
 

@@ -1,4 +1,4 @@
-# User Stories — Kiro Gateway
+# User Stories — AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

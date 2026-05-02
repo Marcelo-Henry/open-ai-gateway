@@ -235,7 +235,7 @@ docker run -d \
 
 ## 🧠 Extended Thinking
 
-Kiro Gateway injects `<thinking_mode>` tags into requests so models reason before responding. The thinking block is extracted and returned as `reasoning_content` (OpenAI-compatible).
+AI Gateway injects `<thinking_mode>` tags into requests so models reason before responding. The thinking block is extracted and returned as `reasoning_content` (OpenAI-compatible).
 
 ```env
 FAKE_REASONING=true                        # Enable (default)
@@ -308,7 +308,7 @@ All tests run with complete network isolation — no real API calls are made.
 ## ❓ FAQ
 
 <details>
-<summary><strong>Which AI clients work with Kiro Gateway?</strong></summary>
+<summary><strong>Which AI clients work with AI Gateway?</strong></summary>
 
 Any client that supports OpenAI or Anthropic API format:
 - **Cursor** — set base URL to `http://localhost:8000/v1`

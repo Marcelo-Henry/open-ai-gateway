@@ -1,4 +1,4 @@
-# Máquinas de Estado — Kiro Gateway
+# Máquinas de Estado — AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

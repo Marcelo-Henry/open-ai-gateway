@@ -1,7 +1,7 @@
  
 
 """
-FastAPI routes for Kiro Gateway.
+FastAPI routes for AI Gateway.
 
 Contains all API endpoints:
 - / and /health: Health check
@@ -82,7 +82,7 @@ async def root():
     """
     return {
         "status": "ok",
-        "message": "Kiro Gateway is running",
+        "message": "AI Gateway is running",
         "version": APP_VERSION
     }
 

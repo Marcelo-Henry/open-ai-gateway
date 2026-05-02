@@ -1,4 +1,4 @@
-# Spec Impact Matrix — Kiro Gateway
+# Spec Impact Matrix — AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 >

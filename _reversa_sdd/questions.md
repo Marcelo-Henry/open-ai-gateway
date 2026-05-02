@@ -1,4 +1,4 @@
-# Lacunas e Perguntas para Validação — Kiro Gateway
+# Lacunas e Perguntas para Validação — AI Gateway
 
 > Gerado pelo Revisor em 2026-05-01
 > `answer_mode: chat` — perguntas para validação direta com Marcelo

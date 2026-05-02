@@ -1,7 +1,7 @@
  
 
 """
-Kiro Gateway - OpenAI-compatible interface for Kiro API.
+AI Gateway - OpenAI-compatible interface for Kiro API.
 
 Application entry point. Creates FastAPI app and connects routes.
 

@@ -1,4 +1,4 @@
-# Code/Spec Matrix — Kiro Gateway
+# Code/Spec Matrix — AI Gateway
 
 > Escala de confiança: 🟢 Cobertura completa | 🟡 Cobertura parcial | — Sem spec correspondente
 

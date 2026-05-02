@@ -1,4 +1,4 @@
-# ERD Completo — Kiro Gateway
+# ERD Completo — AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

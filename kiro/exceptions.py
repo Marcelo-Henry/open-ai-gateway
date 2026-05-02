@@ -1,7 +1,7 @@
  
 
 """
-Exception handlers for Kiro Gateway.
+Exception handlers for AI Gateway.
 
 Contains functions for handling validation errors and other exceptions
 in a JSON-serialization compatible format.

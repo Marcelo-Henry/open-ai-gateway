@@ -1,7 +1,7 @@
  
 
 """
-Debug logging middleware for Kiro Gateway.
+Debug logging middleware for AI Gateway.
 
 This middleware initializes debug logging BEFORE Pydantic validation,
 which allows capturing validation errors (422) in debug logs.

@@ -1,7 +1,7 @@
  
 
 """
-Dynamic Model Resolution System for Kiro Gateway.
+Dynamic Model Resolution System for AI Gateway.
 
 Implements a 4-layer resolution pipeline:
 1. Normalize Name - Convert client formats to Kiro format (dashes→dots, strip dates)

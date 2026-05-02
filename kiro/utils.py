@@ -1,7 +1,7 @@
  
 
 """
-Utility functions for Kiro Gateway.
+Utility functions for AI Gateway.
 
 Contains functions for fingerprint generation, header formatting,
 and other common utilities.

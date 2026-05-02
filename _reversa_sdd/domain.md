@@ -1,4 +1,4 @@
-# Glossário de Domínio — Kiro Gateway
+# Glossário de Domínio — AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 

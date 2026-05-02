@@ -4,11 +4,11 @@
 
 ```mermaid
 C4Container
-    title Kiro Gateway — Diagrama de Containers
+    title AI Gateway — Diagrama de Containers
 
     Person(dev, "Cliente API", "Desenvolvedor ou agente AI usando OpenAI/Anthropic SDK")
 
-    System_Boundary(gateway, "Kiro Gateway") {
+    System_Boundary(gateway, "AI Gateway") {
         Container(fastapi, "FastAPI Application", "Python 3.10+ / FastAPI / Uvicorn", "Servidor HTTP principal. Expõe endpoints OpenAI e Anthropic. Gerencia autenticação de clientes, roteamento e orquestração.")
 
         Container(account_mgr, "Account Manager", "Python / asyncio", "Gerencia múltiplas contas Kiro com Circuit Breaker, sticky behavior e failover. Persiste estado em state.json.")

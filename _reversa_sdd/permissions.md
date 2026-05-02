@@ -1,4 +1,4 @@
-# Modelo de Permissões e Autenticação — Kiro Gateway
+# Modelo de Permissões e Autenticação — AI Gateway
 
 > Escala de confiança: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 
@@ -6,7 +6,7 @@
 
 ## 1. Visão Geral
 
-O Kiro Gateway opera com dois níveis de autenticação independentes:
+O AI Gateway opera com dois níveis de autenticação independentes:
 
 1. **Autenticação do Cliente → Gateway** (`PROXY_API_KEY`): controla quem pode usar o gateway
 2. **Autenticação do Gateway → Kiro API** (Access Token): controla o acesso à Kiro API da Amazon
@@ -18,7 +18,7 @@ Cliente
   │  ou x-api-key: {PROXY_API_KEY}
   ▼
 ┌─────────────────────────────┐
-│       Kiro Gateway          │
+│       AI Gateway          │
 │   (verify_api_key /         │
 │    verify_anthropic_api_key)│
 └─────────────────────────────┘

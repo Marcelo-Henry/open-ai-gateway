@@ -1,7 +1,7 @@
  
 
 """
-Model metadata cache for Kiro Gateway.
+Model metadata cache for AI Gateway.
 
 Thread-safe storage for available model information
 with TTL and lazy loading support.
