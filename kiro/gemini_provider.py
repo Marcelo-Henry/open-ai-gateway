@@ -12,7 +12,9 @@ Auth:      x-goog-api-key header (API key) or Authorization: Bearer (OAuth2)
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -532,19 +534,65 @@ async def stream_gemini_response(
 
     message_id = f"msg_{uuid.uuid4().hex[:24]}"
 
-    # Emit Anthropic stream-opening event
-    yield _make_message_start_event(model, message_id)
-
     # State tracking for content blocks
     block_index = 0
     text_block_started = False
     has_tool_calls = False
+    message_start_emitted = False
+
+    _MAX_429_RETRIES = 5
 
     try:
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(connect=30, read=300, write=30, pool=30)
         ) as client:
-            async with client.stream("POST", url, json=final_payload, headers=headers) as response:
+
+            # Retry loop for 429 rate limits
+            for attempt in range(_MAX_429_RETRIES):
+                response_cm = client.stream("POST", url, json=final_payload, headers=headers)
+                response = await response_cm.__aenter__()
+
+                if response.status_code == 429:
+                    body = await response.aread()
+                    await response_cm.__aexit__(None, None, None)
+
+                    # Extract wait time from error message (e.g. "after 11s")
+                    wait_secs = 15
+                    try:
+                        body_text = body.decode("utf-8", errors="replace")
+                        match = re.search(r"after\s+(\d+)s", body_text)
+                        if match:
+                            wait_secs = int(match.group(1)) + 1
+                    except Exception:
+                        pass
+
+                    if attempt < _MAX_429_RETRIES - 1:
+                        logger.warning(
+                            f"Gemini 429 rate limit (attempt {attempt + 1}/{_MAX_429_RETRIES}), "
+                            f"waiting {wait_secs}s before retry..."
+                        )
+                        await asyncio.sleep(wait_secs)
+                        continue
+
+                    # Exhausted retries
+                    raise HTTPException(
+                        status_code=429,
+                        detail={
+                            "type": "error",
+                            "error": {
+                                "type": "rate_limit_error",
+                                "message": (
+                                    "Gemini API rate limit reached after "
+                                    f"{_MAX_429_RETRIES} retries. Please wait before retrying."
+                                ),
+                            },
+                        },
+                    )
+
+                # Not a 429 — break out of retry loop
+                break
+
+            try:
                 if response.status_code == 401:
                     await response.aread()
                     raise HTTPException(
@@ -556,22 +604,6 @@ async def stream_gemini_response(
                                 "message": (
                                     "Gemini API key is invalid or OAuth2 token expired. "
                                     "Check GEMINI_API_KEY or run `gemini auth login`."
-                                ),
-                            },
-                        },
-                    )
-
-                if response.status_code == 429:
-                    await response.aread()
-                    raise HTTPException(
-                        status_code=429,
-                        detail={
-                            "type": "error",
-                            "error": {
-                                "type": "rate_limit_error",
-                                "message": (
-                                    "Gemini API rate limit reached. "
-                                    "Please wait before retrying."
                                 ),
                             },
                         },
@@ -601,6 +633,10 @@ async def stream_gemini_response(
                             },
                         },
                     )
+
+                # Success — now emit the stream opening event
+                yield _make_message_start_event(model, message_id)
+                message_start_emitted = True
 
                 # Parse Gemini SSE stream and translate to Anthropic format
                 async for line in response.aiter_lines():
@@ -666,6 +702,9 @@ async def stream_gemini_response(
                     if finish_reason and finish_reason not in ("", "STOP"):
                         logger.debug(f"Gemini finish reason: {finish_reason}")
 
+            finally:
+                await response_cm.__aexit__(None, None, None)
+
     except HTTPException:
         raise
     except httpx.TimeoutException as e:
@@ -692,6 +731,9 @@ async def stream_gemini_response(
                 },
             },
         ) from e
+
+    if not message_start_emitted:
+        return
 
     # Close any open text block
     if text_block_started:
