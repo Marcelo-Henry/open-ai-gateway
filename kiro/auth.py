@@ -31,6 +31,7 @@ from kiro.config import (
     get_kiro_q_host,
     get_aws_sso_oidc_url,
 )
+from kiro.sqlite_copy import copy_sqlite_db
 from kiro.utils import get_machine_fingerprint
 
 
@@ -129,7 +130,8 @@ class KiroAuthManager:
         self._profile_arn = profile_arn
         self._region = region
         self._creds_file = creds_file
-        self._sqlite_db = sqlite_db
+        self._sqlite_db_source = sqlite_db if sqlite_db else None
+        self._sqlite_db: Optional[str] = None
         
         # AWS SSO OIDC specific fields
         self._client_id: Optional[str] = client_id
@@ -160,7 +162,8 @@ class KiroAuthManager:
         
         # Load credentials from SQLite if specified (takes priority over JSON)
         if sqlite_db:
-            self._load_credentials_from_sqlite(sqlite_db)
+            self._sqlite_db = copy_sqlite_db(sqlite_db)
+            self._load_credentials_from_sqlite(self._sqlite_db)
         # Load credentials from JSON file if specified
         elif creds_file:
             self._load_credentials_from_file(creds_file)
@@ -360,7 +363,21 @@ class KiroAuthManager:
             logger.error(f"JSON decode error in SQLite data: {e}")
         except Exception as e:
             logger.error(f"Error loading credentials from SQLite: {e}")
-    
+
+    def _refresh_sqlite_copy(self) -> None:
+        """Re-copy the original SQLite DB and reload credentials from the fresh copy.
+
+        Called when the gateway needs to pick up tokens that kiro-cli may have
+        refreshed in the original database.
+        """
+        if not self._sqlite_db_source:
+            return
+        try:
+            copy_sqlite_db(self._sqlite_db_source)
+            self._load_credentials_from_sqlite(self._sqlite_db)
+        except Exception as e:
+            logger.warning(f"Failed to refresh SQLite copy: {e}")
+
     def _load_credentials_from_file(self, file_path: str) -> None:
         """
         Loads credentials from a JSON file.
@@ -747,9 +764,9 @@ class KiroAuthManager:
             await self._do_aws_sso_oidc_refresh()
         except httpx.HTTPStatusError as e:
             # 400 = invalid_request, likely stale token after kiro-cli re-login
-            if e.response.status_code == 400 and self._sqlite_db:
-                logger.warning("Token refresh failed with 400, reloading credentials from SQLite and retrying...")
-                self._load_credentials_from_sqlite(self._sqlite_db)
+            if e.response.status_code == 400 and self._sqlite_db_source:
+                logger.warning("Token refresh failed with 400, re-copying SQLite and retrying...")
+                self._refresh_sqlite_copy()
                 await self._do_aws_sso_oidc_refresh()
             else:
                 raise
@@ -871,9 +888,9 @@ class KiroAuthManager:
                 return self._access_token
             
             # SQLite mode: reload credentials first, kiro-cli might have updated them
-            if self._sqlite_db and self.is_token_expiring_soon():
-                logger.debug("SQLite mode: reloading credentials before refresh attempt")
-                self._load_credentials_from_sqlite(self._sqlite_db)
+            if self._sqlite_db_source and self.is_token_expiring_soon():
+                logger.debug("SQLite mode: re-copying and reloading credentials before refresh attempt")
+                self._refresh_sqlite_copy()
                 # Check if reloaded token is now valid
                 if self._access_token and not self.is_token_expiring_soon():
                     logger.debug("SQLite reload provided fresh token, no refresh needed")
@@ -885,7 +902,7 @@ class KiroAuthManager:
             except httpx.HTTPStatusError as e:
                 # Graceful degradation for SQLite mode when refresh fails twice
                 # This happens when kiro-cli refreshed tokens in memory without persisting
-                if e.response.status_code == 400 and self._sqlite_db:
+                if e.response.status_code == 400 and self._sqlite_db_source:
                     logger.warning(
                         "Token refresh failed with 400 after SQLite reload. "
                         "This may happen if kiro-cli refreshed tokens in memory without persisting."

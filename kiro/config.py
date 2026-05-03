@@ -148,6 +148,11 @@ KIRO_CLI_DB_FILE: str = str(Path(_raw_cli_db_file)) if _raw_cli_db_file else ""
 # Default: false (write-back enabled)
 SQLITE_READONLY: bool = os.getenv("SQLITE_READONLY", "false").lower() in ("true", "1", "yes")
 
+# Directory for SQLite working copies
+# When using kiro-cli SQLite database, the gateway copies it to avoid locking conflicts.
+# Default: ~/.cache/codex-gateway/
+SQLITE_COPY_DIR: str = os.getenv("SQLITE_COPY_DIR", str(Path.home() / ".cache" / "codex-gateway"))
+
 # ==================================================================================================
 # Kiro API URL Templates
 # ==================================================================================================
