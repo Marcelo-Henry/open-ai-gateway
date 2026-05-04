@@ -31,7 +31,7 @@ from kiro.config import (
     get_kiro_q_host,
     get_aws_sso_oidc_url,
 )
-from kiro.sqlite_copy import copy_sqlite_db
+from kiro.sqlite_copy import copy_if_missing, read_credentials_from_source
 from kiro.utils import get_machine_fingerprint
 
 
@@ -162,7 +162,7 @@ class KiroAuthManager:
         
         # Load credentials from SQLite if specified (takes priority over JSON)
         if sqlite_db:
-            self._sqlite_db = copy_sqlite_db(sqlite_db)
+            self._sqlite_db = copy_if_missing(sqlite_db)
             self._load_credentials_from_sqlite(self._sqlite_db)
         # Load credentials from JSON file if specified
         elif creds_file:
@@ -364,19 +364,49 @@ class KiroAuthManager:
         except Exception as e:
             logger.error(f"Error loading credentials from SQLite: {e}")
 
-    def _refresh_sqlite_copy(self) -> None:
-        """Re-copy the original SQLite DB and reload credentials from the fresh copy.
+    def _reload_credentials_from_source(self) -> None:
+        """Read fresh credentials from the original DB in read-only mode.
 
-        Called when the gateway needs to pick up tokens that kiro-cli may have
-        refreshed in the original database.
+        Opens the source database with ``?mode=ro`` (no locks, no copy) and
+        updates in-memory state.  This replaces the old ``_refresh_sqlite_copy``
+        which copied the entire database (~1 GB+) on every call.
         """
         if not self._sqlite_db_source:
             return
         try:
-            copy_sqlite_db(self._sqlite_db_source)
-            self._load_credentials_from_sqlite(self._sqlite_db)
+            creds = read_credentials_from_source(
+                self._sqlite_db_source,
+                SQLITE_TOKEN_KEYS,
+                SQLITE_REGISTRATION_KEYS,
+            )
+            if not creds:
+                logger.debug("No credentials found in source DB")
+                return
+
+            if creds.get("access_token"):
+                self._access_token = creds["access_token"]
+            if creds.get("refresh_token"):
+                self._refresh_token = creds["refresh_token"]
+            if creds.get("profile_arn"):
+                self._profile_arn = creds["profile_arn"]
+            if creds.get("region"):
+                self._sso_region = creds["region"]
+            if creds.get("scopes"):
+                self._scopes = creds["scopes"]
+            if creds.get("expires_at"):
+                self._expires_at = creds["expires_at"]
+            if creds.get("client_id"):
+                self._client_id = creds["client_id"]
+            if creds.get("client_secret"):
+                self._client_secret = creds["client_secret"]
+            if creds.get("detected_api_region"):
+                self._detected_api_region = creds["detected_api_region"]
+            if creds.get("sqlite_token_key"):
+                self._sqlite_token_key = creds["sqlite_token_key"]
+
+            logger.debug("Credentials reloaded from source DB (read-only)")
         except Exception as e:
-            logger.warning(f"Failed to refresh SQLite copy: {e}")
+            logger.warning(f"Failed to reload credentials from source: {e}")
 
     def _load_credentials_from_file(self, file_path: str) -> None:
         """
@@ -765,8 +795,8 @@ class KiroAuthManager:
         except httpx.HTTPStatusError as e:
             # 400 = invalid_request, likely stale token after kiro-cli re-login
             if e.response.status_code == 400 and self._sqlite_db_source:
-                logger.warning("Token refresh failed with 400, re-copying SQLite and retrying...")
-                self._refresh_sqlite_copy()
+                logger.warning("Token refresh failed with 400, reloading credentials from source and retrying...")
+                self._reload_credentials_from_source()
                 await self._do_aws_sso_oidc_refresh()
             else:
                 raise
@@ -889,8 +919,8 @@ class KiroAuthManager:
             
             # SQLite mode: reload credentials first, kiro-cli might have updated them
             if self._sqlite_db_source and self.is_token_expiring_soon():
-                logger.debug("SQLite mode: re-copying and reloading credentials before refresh attempt")
-                self._refresh_sqlite_copy()
+                logger.debug("SQLite mode: reloading credentials from source (read-only)")
+                self._reload_credentials_from_source()
                 # Check if reloaded token is now valid
                 if self._access_token and not self.is_token_expiring_soon():
                     logger.debug("SQLite reload provided fresh token, no refresh needed")

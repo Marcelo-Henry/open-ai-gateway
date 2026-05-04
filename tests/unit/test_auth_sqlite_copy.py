@@ -51,8 +51,39 @@ class TestAuthManagerSqliteCopy:
         assert manager._sqlite_db != str(source)
         assert Path(manager._sqlite_db).exists()
 
-    def test_refresh_copy_picks_up_changes(self, tmp_path: Path) -> None:
-        """After modifying the original, _refresh_sqlite_copy() loads the new token."""
+    def test_init_skips_copy_when_exists(self, tmp_path: Path) -> None:
+        """Second KiroAuthManager instance reuses existing copy without re-copying."""
+        source = tmp_path / "data.sqlite3"
+        _create_auth_db(source)
+
+        copy_dir = tmp_path / "copies"
+        with patch("kiro.sqlite_copy.SQLITE_COPY_DIR", str(copy_dir)):
+            manager1 = KiroAuthManager(sqlite_db=str(source))
+            copy_path = Path(manager1._sqlite_db)
+            mtime_after_first = copy_path.stat().st_mtime
+
+            # Modify source — should NOT be picked up by second init
+            conn = sqlite3.connect(str(source))
+            token_data = json.dumps({
+                "access_token": "newer-token",
+                "refresh_token": "refresh-token-abc",
+                "expires_at": "2099-01-01T00:00:00+00:00",
+                "region": "us-east-1",
+            })
+            conn.execute("UPDATE auth_kv SET value = ? WHERE key = ?", (token_data, "kirocli:social:token"))
+            conn.commit()
+            conn.close()
+
+            manager2 = KiroAuthManager(sqlite_db=str(source))
+            mtime_after_second = copy_path.stat().st_mtime
+
+        # Copy was not re-written
+        assert mtime_after_first == mtime_after_second
+        # Second manager loaded from the OLD copy (not the updated source)
+        assert manager2._access_token == "test-token-123"
+
+    def test_reload_picks_up_changes(self, tmp_path: Path) -> None:
+        """_reload_credentials_from_source reads fresh token from original DB."""
         source = tmp_path / "data.sqlite3"
         _create_auth_db(source, access_token="old-token")
 
@@ -61,7 +92,7 @@ class TestAuthManagerSqliteCopy:
             manager = KiroAuthManager(sqlite_db=str(source))
             assert manager._access_token == "old-token"
 
-            # Simulate kiro-cli updating the token
+            # Simulate kiro-cli updating the token in the ORIGINAL
             conn = sqlite3.connect(str(source))
             token_data = json.dumps({
                 "access_token": "new-token-from-kiro-cli",
@@ -75,10 +106,39 @@ class TestAuthManagerSqliteCopy:
             conn.commit()
             conn.close()
 
-            # Refresh the copy
-            manager._refresh_sqlite_copy()
+            # Reload from source (read-only, no copy)
+            manager._reload_credentials_from_source()
 
         assert manager._access_token == "new-token-from-kiro-cli"
+
+    def test_reload_does_not_copy(self, tmp_path: Path) -> None:
+        """_reload_credentials_from_source does not modify the working copy file."""
+        source = tmp_path / "data.sqlite3"
+        _create_auth_db(source)
+
+        copy_dir = tmp_path / "copies"
+        with patch("kiro.sqlite_copy.SQLITE_COPY_DIR", str(copy_dir)):
+            manager = KiroAuthManager(sqlite_db=str(source))
+            copy_hash_before = _file_hash(Path(manager._sqlite_db))
+
+            # Update source
+            conn = sqlite3.connect(str(source))
+            token_data = json.dumps({
+                "access_token": "changed",
+                "refresh_token": "ref-new",
+                "expires_at": "2099-01-01T00:00:00+00:00",
+                "region": "us-east-1",
+            })
+            conn.execute("UPDATE auth_kv SET value = ? WHERE key = ?", (token_data, "kirocli:social:token"))
+            conn.commit()
+            conn.close()
+
+            manager._reload_credentials_from_source()
+            copy_hash_after = _file_hash(Path(manager._sqlite_db))
+
+        # Working copy file is untouched — only in-memory state changed
+        assert copy_hash_before == copy_hash_after
+        assert manager._access_token == "changed"
 
     def test_write_back_goes_to_copy_not_original(self, tmp_path: Path) -> None:
         """_save_credentials_to_sqlite() writes to the copy, not the original."""
@@ -114,10 +174,10 @@ class TestAuthManagerSqliteCopy:
         with patch("kiro.sqlite_copy.SQLITE_COPY_DIR", str(copy_dir)):
             manager = KiroAuthManager(sqlite_db=str(source))
 
-            # Load, refresh copy, write back
-            manager._refresh_sqlite_copy()
+            # Load, reload from source, write back
+            manager._reload_credentials_from_source()
             manager._access_token = "another-token"
             manager._save_credentials_to_sqlite()
-            manager._refresh_sqlite_copy()
+            manager._reload_credentials_from_source()
 
         assert _file_hash(source) == original_hash
