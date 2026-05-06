@@ -140,5 +140,26 @@ EOF
 
     echo -e "${GREEN}✓ Configuração salva no .env!${RESET}"
     echo ""
+
+    # 4. Configure Claude Code
+    echo -e "${CYAN}→${RESET} ${BOLD}Configurar o Claude Code agora?${RESET}"
+    echo -e "${DIM}Isso vai rodar:${RESET}"
+    echo -e "${DIM}  claude config set -g apiBaseUrl \"http://${SERVER_HOST}:8000\"${RESET}"
+    echo -e "${DIM}  claude config set -g apiKey \"$PROXY_API_KEY\"${RESET}"
+    echo ""
+    read -rp "   Configurar? [s/N]: " configure_claude
+    echo ""
+    if [[ "$configure_claude" =~ ^[sS]$ ]]; then
+        if command -v claude &>/dev/null; then
+            claude config set -g apiBaseUrl "http://${SERVER_HOST}:8000"
+            claude config set -g apiKey "$PROXY_API_KEY"
+            echo -e "${GREEN}✓ Claude Code configurado!${RESET}"
+        else
+            echo -e "${YELLOW}Aviso: comando 'claude' não encontrado. Configure manualmente:${RESET}"
+            echo -e "${DIM}  claude config set -g apiBaseUrl \"http://${SERVER_HOST}:8000\"${RESET}"
+            echo -e "${DIM}  claude config set -g apiKey \"$PROXY_API_KEY\"${RESET}"
+        fi
+        echo ""
+    fi
 fi
 
