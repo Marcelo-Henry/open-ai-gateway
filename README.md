@@ -1,367 +1,254 @@
-<div align="center">
+# Open AI Gateway
 
-# codex-gateway
+Um proxy FastAPI que traduz requisições OpenAI, Anthropic e Gemini para o formato da API Kiro (Amazon Q Developer / AWS CodeWhisperer). Qualquer cliente de IA — Cursor, Claude Code, Cline, Continue — pode apontar para este gateway e usar uma assinatura Kiro.
 
-<p>
-  <a href="https://github.com/jwadow/kiro-gateway/releases">
-    <img src="https://img.shields.io/badge/version-2.3-6366f1?style=for-the-badge" alt="Version" />
-  </a>
-  <img src="https://img.shields.io/badge/python-%3E%3D3.10-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python >= 3.10" />
-  <a href="./LICENSE">
-    <img src="https://img.shields.io/badge/license-AGPL--3.0-22c55e?style=for-the-badge" alt="AGPL-3.0 License" />
-  </a>
-  <img src="https://img.shields.io/badge/FastAPI-0.100+-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI" />
-</p>
+## Por que usar?
 
-**OpenAI & Anthropic-compatible proxy for Kiro (Amazon Q Developer / AWS CodeWhisperer).**
+Se você tem uma assinatura Kiro (Amazon Q Developer), este gateway permite usar modelos Claude de alta capacidade em qualquer ferramenta que aceite a API OpenAI ou Anthropic — sem pagar por tokens separadamente.
 
-Use any AI client — Cursor, Claude Code, Continue, Cline, and more — with your Kiro subscription.
+**Casos de uso principais:**
 
-[Quick Start](#-quick-start) · [Authentication](#-authentication) · [Configuration](#-configuration) · [Docker](#-docker) · [FAQ](#-faq)
-
-</div>
+- **Claude Code**: use modelos Claude via sua assinatura Kiro, sem precisar de uma chave Anthropic
+- **Cursor / Cline / Continue**: aponte o `baseURL` para o gateway e use qualquer modelo Kiro
+- **Extended thinking**: o gateway injeta automaticamente `<thinking_mode>` e extrai os blocos de raciocínio como `thinking` content blocks nativos
+- **Modelos Codex (OpenAI)**: roteamento transparente para `gpt-*` e `codex-*` via autenticação OAuth do Codex CLI
+- **Multi-conta**: failover automático entre múltiplas contas Kiro com Circuit Breaker
 
 ---
 
-## ✨ Features
+## Setup rápido
 
-- **🔌 Drop-in compatible** — OpenAI (`/v1/chat/completions`) and Anthropic (`/v1/messages`) APIs
-- **🛠️ Incremental tool call streaming** — Streams `tool_use`/`tool_calls` argument deltas incrementally to reduce malformed tool-call edge cases in clients
-- **🔐 4 auth methods** — JSON file, refresh token, SQLite DB (kiro-cli), AWS SSO OIDC
-- **🧠 Extended thinking** — Fake reasoning via tag injection, exposed as `reasoning_content`
-- **⚡ Streaming** — Full SSE streaming support for both API formats
-- **🐳 Docker ready** — Single-command deploy with docker-compose
-- **🌐 VPN/Proxy support** — HTTP and SOCKS5 proxy for restricted networks (China, corporate)
-- **🔁 Auto-retry** — Exponential backoff on 429, 5xx, and timeouts
-- **🗂️ Model aliases** — Map custom names to real model IDs
-- **🐛 Debug logging** — Save full request/response logs for troubleshooting
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
+### Pré-requisitos
 
 - Python 3.10+
-- Active Kiro / Amazon Q Developer subscription
-- Kiro credentials (see [Authentication](#-authentication))
+- Kiro IDE instalado **ou** kiro-cli com sessão ativa
 
-### Installation
+### 1. Clone e instale dependências
 
 ```bash
-# Clone the repository
-git clone https://github.com/jwadow/kiro-gateway.git
-cd kiro-gateway
-
-# Install dependencies
+git clone https://github.com/Marcelo-Henry/open-ai-gateway
+cd open-ai-gateway
 pip install -r requirements.txt
-
-# Configure credentials
-cp .env.example .env
-# Edit .env with your credentials
 ```
 
-### Run
+### 2. Configure
+
+Execute o script de setup interativo:
+
+```bash
+bash setup.sh
+```
+
+O script vai pedir:
+- Uma senha para proteger o gateway (`PROXY_API_KEY`)
+- O host onde o servidor vai escutar (`127.0.0.1` para local, `0.0.0.0` para rede)
+- O caminho do banco SQLite do kiro-cli
+
+Ao final, oferece configurar o Claude Code automaticamente.
+
+**Ou configure manualmente** criando um arquivo `.env`:
+
+```env
+PROXY_API_KEY="minha-senha-secreta"
+SERVER_HOST="127.0.0.1"
+KIRO_CLI_DB_FILE="~/.local/share/kiro-cli/data.sqlite3"
+```
+
+### 3. Inicie o gateway
 
 ```bash
 python main.py
 ```
 
-Server starts at `http://localhost:8000`. Check `http://localhost:8000/health` to confirm it's up.
+O servidor sobe em `http://localhost:8000` por padrão.
+
+---
+
+## Configurando o Claude Code
+
+Após o gateway estar rodando, configure o Claude Code para usá-lo:
 
 ```bash
-# Custom port
-python main.py --port 9000
-
-# Local connections only
-python main.py --host 127.0.0.1 --port 9000
+claude config set -g apiBaseUrl "http://localhost:8000"
+claude config set -g apiKey "minha-senha-secreta"
 ```
+
+Ou deixe o `setup.sh` fazer isso por você — ele pergunta ao final do setup.
+
+A partir daí, o Claude Code usa sua assinatura Kiro em vez da API Anthropic diretamente.
 
 ---
 
-## 🔐 Authentication
+## Métodos de autenticação
 
-Choose **one** of the four methods and configure it in your `.env` file.
+O gateway detecta automaticamente o tipo de credencial. Configure **um** dos métodos abaixo no `.env`:
 
-### Option 1 — JSON credentials file (Kiro IDE) ✅ Recommended
+| Método | Variável | Quando usar |
+|--------|----------|-------------|
+| SQLite do kiro-cli | `KIRO_CLI_DB_FILE` | Você usa o kiro-cli (recomendado) |
+| JSON do Kiro IDE | `KIRO_CREDS_FILE` | Você tem o Kiro IDE instalado |
+| Refresh token | `REFRESH_TOKEN` | Capturado do tráfego do Kiro IDE |
+| Enterprise (SSO) | `KIRO_CREDS_FILE` com `clientId` | Conta corporativa AWS SSO |
 
-```env
-KIRO_CREDS_FILE=~/.aws/sso/cache/kiro-auth-token.json
-```
-
-The file is created automatically when you log in to the Kiro IDE.
-
-### Option 2 — Refresh token
-
-```env
-REFRESH_TOKEN=your_refresh_token_here
-```
-
-Capture the token from Kiro IDE network traffic (look for `refreshToken` in requests to `auth.desktop.kiro.dev`).
-
-### Option 3 — kiro-cli SQLite database
-
-```env
-KIRO_CLI_DB_FILE=~/.local/share/kiro-cli/data.sqlite3
-```
-
-Created automatically after running `kiro login` with the [kiro-cli](https://github.com/aws/amazon-q-developer-cli).
-
-### Option 4 — AWS SSO OIDC (Enterprise / Builder ID)
-
-Credentials are auto-detected from the JSON file when `clientId` and `clientSecret` are present. No extra configuration needed beyond `KIRO_CREDS_FILE`.
-
----
-
-## ⚙️ Configuration
-
-Copy `.env.example` to `.env` and adjust as needed.
-
-### Required
-
-| Variable        | Description                                           | Default                        |
-| --------------- | ----------------------------------------------------- | ------------------------------ |
-| `PROXY_API_KEY` | Password clients use to authenticate with the gateway | `my-super-secret-password-123` |
-
-### Authentication (choose one)
-
-| Variable           | Description                            |
-| ------------------ | -------------------------------------- |
-| `KIRO_CREDS_FILE`  | Path to Kiro IDE JSON credentials file |
-| `REFRESH_TOKEN`    | Kiro refresh token                     |
-| `KIRO_CLI_DB_FILE` | Path to kiro-cli SQLite database       |
-
-### Optional
-
-| Variable                      | Description                                                | Default     |
-| ----------------------------- | ---------------------------------------------------------- | ----------- |
-| `SERVER_HOST`                 | Bind address                                               | `0.0.0.0`   |
-| `SERVER_PORT`                 | Port                                                       | `8000`      |
-| `KIRO_REGION`                 | AWS region                                                 | `us-east-1` |
-| `LOG_LEVEL`                   | Log verbosity (`DEBUG`, `INFO`, `WARNING`)                 | `INFO`      |
-| `DEBUG_MODE`                  | Save request/response logs (`off`, `errors`, `all`)        | `off`       |
-| `VPN_PROXY_URL`               | HTTP/SOCKS5 proxy URL                                      | —           |
-| `FAKE_REASONING`              | Enable extended thinking via tag injection                 | `true`      |
-| `FAKE_REASONING_MAX_TOKENS`   | Max thinking tokens                                        | `4000`      |
-| `TOOL_DESCRIPTION_MAX_LENGTH` | Max tool description length before moving to system prompt | `10000`     |
-| `FIRST_TOKEN_TIMEOUT`         | Seconds to wait for first streaming token before retry     | `15`        |
-| `STREAMING_READ_TIMEOUT`      | Max seconds between streaming chunks                       | `300`       |
-
----
-
-## 🌐 API Endpoints
-
-### OpenAI-compatible
-
-```
-GET  /v1/models                  List available models
-POST /v1/chat/completions        Chat completions (streaming + non-streaming)
-```
-
-### Anthropic-compatible
-
-```
-POST /v1/messages                Messages API (streaming + non-streaming)
-```
-
-### Utility
-
-```
-GET  /health                     Health check
-GET  /docs                       Interactive API docs (Swagger UI)
-```
-
-### Authentication
+**Onde fica o SQLite do kiro-cli?**
 
 ```bash
-# OpenAI format
-Authorization: Bearer YOUR_PROXY_API_KEY
-
-# Anthropic format
-x-api-key: YOUR_PROXY_API_KEY
+# Linux / macOS
+find ~ -name data.sqlite3 -path "*kiro*" -o -name data.sqlite3 -path "*amazon-q*" 2>/dev/null
 ```
+
+Caminhos comuns:
+- `~/.local/share/kiro-cli/data.sqlite3`
+- `~/.local/share/amazon-q/data.sqlite3`
 
 ---
 
-## 🐳 Docker
-
-### docker-compose (recommended)
+## Docker
 
 ```bash
-# Start
-docker-compose up -d
+# Copie e edite o .env
+cp .env.example .env
 
-# View logs
-docker-compose logs -f
-
-# Stop
-docker-compose down
-
-# Rebuild after code changes
-docker-compose up -d --build
+# Suba o container
+docker compose up -d
 ```
 
-### docker run
+Para montar o SQLite do kiro-cli, descomente a linha de volume no `docker-compose.yml`:
+
+```yaml
+volumes:
+  - ~/.local/share/kiro-cli:/home/kiro/.local/share/kiro-cli:ro
+```
+
+---
+
+## Variáveis de configuração
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `PROXY_API_KEY` | `my-super-secret-password-123` | Senha do gateway — **troque em produção** |
+| `SERVER_HOST` | `0.0.0.0` | Host do servidor |
+| `SERVER_PORT` | `8000` | Porta do servidor |
+| `KIRO_REGION` | `us-east-1` | Região AWS |
+| `FAKE_REASONING_ENABLED` | `true` | Injeta `<thinking_mode>` para extended thinking |
+| `WEB_SEARCH_ENABLED` | `true` | Injeta ferramenta `web_search` automaticamente |
+| `ACCOUNT_SYSTEM` | `false` | Habilita multi-conta com failover |
+| `TRUNCATION_RECOVERY` | `true` | Recuperação automática de tool calls truncados |
+| `AUTO_TRIM_PAYLOAD` | `false` | Trim automático quando payload > ~615KB |
+| `FIRST_TOKEN_TIMEOUT` | `15s` | Timeout para primeiro token (retry automático) |
+| `DEBUG_MODE` | `off` | `errors` ou `all` para salvar req/resp em `debug_logs/` |
+| `VPN_PROXY_URL` | — | Proxy HTTP/HTTPS para redes restritas |
+
+---
+
+## Endpoints disponíveis
+
+| Endpoint | Formato |
+|----------|---------|
+| `GET /v1/models` | OpenAI |
+| `POST /v1/chat/completions` | OpenAI |
+| `POST /v1/messages` | Anthropic |
+| `POST /v1beta/models/{model}:generateContent` | Gemini |
+| `GET /health` | Health check |
+| `GET /docs` | Swagger UI |
+
+---
+
+## Multi-conta
+
+Para usar múltiplas contas Kiro com failover automático, crie um `credentials.json` na raiz do projeto:
+
+```json
+[
+  {
+    "type": "sqlite",
+    "path": "~/.local/share/kiro-cli/data.sqlite3"
+  },
+  {
+    "type": "refresh_token",
+    "refresh_token": "seu-refresh-token-da-segunda-conta"
+  }
+]
+```
+
+Ative no `.env`:
+
+```env
+ACCOUNT_SYSTEM=true
+```
+
+O Circuit Breaker gerencia falhas com backoff exponencial (`60s × 2^n`, máximo 1 dia) e 10% de chance de retry probabilístico durante cooldown.
+
+---
+
+## Modelos Codex (OpenAI)
+
+Requisições para modelos `gpt-*` e `codex-*` são roteadas automaticamente para o endpoint privado do Codex CLI (`chatgpt.com/backend-api/codex/responses`), sem passar pela API Kiro.
+
+**Modelos disponíveis:**
+
+| Modelo | Nome |
+|--------|------|
+| `gpt-5.5` | GPT-5.5 (Codex) |
+| `gpt-5.4` | GPT-5.4 (Codex) |
+| `gpt-5.4-mini` | GPT-5.4 Mini (Codex) |
+| `gpt-5.3-codex-spark` | GPT-5.3 Codex Spark (Codex) |
+
+**Pré-requisito:** ter o Codex CLI instalado e autenticado. O gateway lê as credenciais de `~/.codex/auth.json` (criado automaticamente pelo `codex login`) e renova o token automaticamente antes do vencimento.
+
+Ative no `.env`:
+
+```env
+CODEX_ENABLED=true
+```
+
+---
+
+## Desenvolvimento e testes
 
 ```bash
-# With refresh token
-docker run -d \
-  -p 8000:8000 \
-  -e PROXY_API_KEY="your-secret-key" \
-  -e REFRESH_TOKEN="your-refresh-token" \
-  --name kiro-gateway \
-  ghcr.io/jwadow/kiro-gateway:latest
+# Rodar todos os testes
+pytest
 
-# With credentials file
-docker run -d \
-  -p 8000:8000 \
-  -v ~/.aws/sso/cache:/home/kiro/.aws/sso/cache:ro \
-  -e KIRO_CREDS_FILE=/home/kiro/.aws/sso/cache/kiro-auth-token.json \
-  -e PROXY_API_KEY="your-secret-key" \
-  --name kiro-gateway \
-  ghcr.io/jwadow/kiro-gateway:latest
+# Rodar um arquivo específico
+pytest tests/unit/test_converters.py
 
-# With kiro-cli database
-docker run -d \
-  -p 8000:8000 \
-  -v ~/.local/share/kiro-cli:/home/kiro/.local/share/kiro-cli:ro \
-  -e KIRO_CLI_DB_FILE=/home/kiro/.local/share/kiro-cli/data.sqlite3 \
-  -e PROXY_API_KEY="your-secret-key" \
-  --name kiro-gateway \
-  ghcr.io/jwadow/kiro-gateway:latest
-```
-
----
-
-## 🧠 Extended Thinking
-
-Open AI Gateway injects `<thinking_mode>` tags into requests so models reason before responding. The thinking block is extracted and returned as `reasoning_content` (OpenAI-compatible).
-
-```env
-FAKE_REASONING=true                        # Enable (default)
-FAKE_REASONING_MAX_TOKENS=4000             # Thinking budget
-FAKE_REASONING_HANDLING=as_reasoning_content  # or: remove, pass, strip_tags
-```
-
-> This is a prompt-level hack, not native extended thinking — it works great but relies on the model following the injected instructions.
-
----
-
-## 🌐 VPN / Proxy Support
-
-For restricted networks (China, corporate firewalls):
-
-```env
-VPN_PROXY_URL=http://127.0.0.1:7890        # HTTP proxy
-VPN_PROXY_URL=socks5://127.0.0.1:1080      # SOCKS5 proxy
-VPN_PROXY_URL=http://user:pass@proxy:8080  # With authentication
-```
-
----
-
-## 🗂️ Model Aliases
-
-Map custom names to real model IDs — useful to avoid conflicts with IDE-specific names (e.g., Cursor's `auto`):
-
-```python
-# In kiro/config.py
-MODEL_ALIASES = {
-    "auto-kiro": "auto",          # Default: avoids Cursor conflict
-    "my-opus": "claude-opus-4.5", # Custom shortcut
-}
-```
-
----
-
-## 🐛 Debug Logging
-
-```env
-DEBUG_MODE=errors   # Save logs only for failed requests (recommended for troubleshooting)
-DEBUG_MODE=all      # Save logs for every request
-DEBUG_MODE=off      # Disabled (default)
-```
-
-Logs are saved to `debug_logs/` with full request and response details.
-
----
-
-## 🧪 Tests
-
-```bash
-# Run all tests
+# Verbose
 pytest -v
 
-# Unit tests only
-pytest tests/unit/ -v
-
-# Integration tests only
-pytest tests/integration/ -v
-
-# With coverage
-pytest --cov=kiro --cov-report=html
+# Teste de integração manual (requer gateway rodando)
+python manual_api_test.py
 ```
 
-All tests run with complete network isolation — no real API calls are made.
+Os testes unitários em `tests/unit/` são isolados de rede — nenhuma chamada real à API.
 
 ---
 
-## ❓ FAQ
+## Solução de problemas
 
-<details>
-<summary><strong>Which AI clients work with Open AI Gateway?</strong></summary>
+**Gateway não inicia — "No Kiro credentials configured"**
+Verifique se o caminho do SQLite está correto e o arquivo existe:
+```bash
+ls -la ~/.local/share/kiro-cli/data.sqlite3
+```
 
-Any client that supports OpenAI or Anthropic API format:
-- **Cursor** — set base URL to `http://localhost:8000/v1`
-- **Claude Code** — use `ANTHROPIC_BASE_URL=http://localhost:8000`
-- **Continue** — configure as OpenAI provider
-- **Cline**, **Roo**, **Aider**, **Open WebUI**, and more
+**Erro 403 nas requisições**
+O token expirou. O gateway tenta refresh automático. Se persistir, reinicie o kiro-cli para renovar a sessão.
 
-</details>
+**Payload muito grande / "Improperly formed request"**
+Ative o trim automático no `.env`:
+```env
+AUTO_TRIM_PAYLOAD=true
+```
 
-<details>
-<summary><strong>I'm getting "Improperly formed request" errors.</strong></summary>
-
-This is a notoriously vague Kiro API error that can mean many things: message structure issues, tool definition problems, content format errors, or undocumented constraints. Enable debug logging (`DEBUG_MODE=errors`) to capture the full request/response and identify the cause.
-
-</details>
-
-<details>
-<summary><strong>How do I get my refresh token?</strong></summary>
-
-Open the Kiro IDE, open DevTools (F12), go to the Network tab, and look for requests to `auth.desktop.kiro.dev`. The `refreshToken` field in the request body is what you need.
-
-</details>
-
-<details>
-<summary><strong>Can I use this with a free Kiro plan?</strong></summary>
-
-Yes, but some models (like Opus) may not be available on free plans. The gateway will return whatever Kiro API allows for your subscription.
-
-</details>
-
-<details>
-<summary><strong>Token refresh is failing. What do I do?</strong></summary>
-
-1. Check that your credentials file or refresh token is still valid (tokens expire)
-2. Re-login to Kiro IDE to get fresh credentials
-3. Enable `DEBUG_MODE=errors` and check `debug_logs/` for the exact error
-
-</details>
+**Debug de requisições**
+```env
+DEBUG_MODE=all
+```
+Os logs completos ficam em `debug_logs/`.
 
 ---
 
-## 📄 License
+## Licença
 
-AGPL-3.0 — see [LICENSE](LICENSE) for details.
-
----
-
-## Credits
-
-This project is a fork of kiro-gateway by Jwadow, licensed under AGPL-3.0.
-
----
-
-<div align="center">
-  <sub>Made with ❤️ by <a href="https://github.com/jwadow">@jwadow</a> · <a href="https://github.com/jwadow/kiro-gateway/issues">Report an issue</a></sub>
-</div>
+Veja [LICENSE](LICENSE).
