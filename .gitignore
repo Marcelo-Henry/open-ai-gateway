@@ -37,3 +37,4 @@ htmlcov/
 # Reversa
 .reversa/config.user.toml
 specs/
+state.json
