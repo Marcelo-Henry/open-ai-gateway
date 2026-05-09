@@ -38,6 +38,20 @@ else
     needs_sqlite=false
 fi
 
+if [ -z "$CODEX_REASONING_EFFORT" ]; then
+    needs_codex_reasoning=true
+    needs_setup=true
+else
+    needs_codex_reasoning=false
+fi
+
+if [ -z "$FAKE_REASONING_MAX_TOKENS" ]; then
+    needs_fake_reasoning_tokens=true
+    needs_setup=true
+else
+    needs_fake_reasoning_tokens=false
+fi
+
 # Interactive setup for missing values only
 if [ "$needs_setup" = true ]; then
     echo ""
@@ -110,6 +124,31 @@ if [ "$needs_setup" = true ]; then
         fi
     fi
 
+    # 4. Codex reasoning effort
+    if [ "$needs_codex_reasoning" = true ]; then
+        echo -e "${CYAN}→${RESET} ${BOLD}Nível de raciocínio do Codex${RESET}"
+        echo -e "${DIM}Controla o esforço de raciocínio para modelos gpt-*/codex-* roteados pelo Codex Provider.${RESET}"
+        echo -e "${DIM}  concise  = respostas mais rápidas e diretas${RESET}"
+        echo -e "${DIM}  auto     = equilíbrio automático (recomendado)${RESET}"
+        echo -e "${DIM}  detailed = raciocínio mais profundo, respostas mais lentas${RESET}"
+        echo ""
+        read -rp "   Nível [auto]: " CODEX_REASONING_EFFORT
+        CODEX_REASONING_EFFORT="${CODEX_REASONING_EFFORT:-auto}"
+        echo ""
+    fi
+
+    # 5. Fake reasoning max tokens
+    if [ "$needs_fake_reasoning_tokens" = true ]; then
+        echo -e "${CYAN}→${RESET} ${BOLD}Máximo de tokens para o Fake Reasoning${RESET}"
+        echo -e "${DIM}Orçamento padrão de tokens de raciocínio quando o cliente não especifica.${RESET}"
+        echo -e "${DIM}Valores maiores permitem raciocínio mais detalhado, mas aumentam o tempo de resposta.${RESET}"
+        echo -e "${DIM}Recomendado: 4000 (padrão) a 10000 (máximo)${RESET}"
+        echo ""
+        read -rp "   Max tokens [4000]: " FAKE_REASONING_MAX_TOKENS
+        FAKE_REASONING_MAX_TOKENS="${FAKE_REASONING_MAX_TOKENS:-4000}"
+        echo ""
+    fi
+
     # Write .env preserving any extra vars the user may have added manually
     if [ -f .env ]; then
         # Update existing .env: replace or append each var
@@ -127,6 +166,8 @@ if [ "$needs_setup" = true ]; then
         [ "$needs_proxy_key" = true ] && _update_env_var "PROXY_API_KEY" "$PROXY_API_KEY"
         [ "$needs_host" = true ] && _update_env_var "SERVER_HOST" "$SERVER_HOST"
         [ "$needs_sqlite" = true ] && _update_env_var "KIRO_CLI_DB_FILE" "$KIRO_CLI_DB_FILE"
+        [ "$needs_codex_reasoning" = true ] && _update_env_var "CODEX_REASONING_EFFORT" "$CODEX_REASONING_EFFORT"
+        [ "$needs_fake_reasoning_tokens" = true ] && _update_env_var "FAKE_REASONING_MAX_TOKENS" "$FAKE_REASONING_MAX_TOKENS"
     else
         # Create fresh .env
         cat > .env << EOF
@@ -135,30 +176,76 @@ if [ "$needs_setup" = true ]; then
 PROXY_API_KEY="$PROXY_API_KEY"
 SERVER_HOST="$SERVER_HOST"
 KIRO_CLI_DB_FILE="$KIRO_CLI_DB_FILE"
+CODEX_REASONING_EFFORT="$CODEX_REASONING_EFFORT"
+FAKE_REASONING_MAX_TOKENS="$FAKE_REASONING_MAX_TOKENS"
 EOF
     fi
 
     echo -e "${GREEN}✓ Configuração salva no .env!${RESET}"
     echo ""
 
-    # 4. Configure Claude Code
+    # 6. Configure Claude Code
     echo -e "${CYAN}→${RESET} ${BOLD}Configurar o Claude Code agora?${RESET}"
-    echo -e "${DIM}Isso vai rodar:${RESET}"
-    echo -e "${DIM}  claude config set -g apiBaseUrl \"http://${SERVER_HOST}:8000\"${RESET}"
-    echo -e "${DIM}  claude config set -g apiKey \"$PROXY_API_KEY\"${RESET}"
+    echo -e "${DIM}Isso vai adicionar no topo do ~/.claude/settings.json:${RESET}"
+    echo -e "${DIM}  {${RESET}"
+    echo -e "${DIM}    \"env\": {${RESET}"
+    echo -e "${DIM}      \"ANTHROPIC_AUTH_TOKEN\": \"$PROXY_API_KEY\",${RESET}"
+    echo -e "${DIM}      \"ANTHROPIC_MODEL\": \"claude-sonnet-4-6\",${RESET}"
+    echo -e "${DIM}      \"ANTHROPIC_BASE_URL\": \"http://${SERVER_HOST}:8000\"${RESET}"
+    echo -e "${DIM}    },${RESET}"
+    echo -e "${DIM}    ...${RESET}"
+    echo -e "${DIM}  }${RESET}"
     echo ""
     read -rp "   Configurar? [s/N]: " configure_claude
     echo ""
     if [[ "$configure_claude" =~ ^[sS]$ ]]; then
-        if command -v claude &>/dev/null; then
-            claude config set -g apiBaseUrl "http://${SERVER_HOST}:8000"
-            claude config set -g apiKey "$PROXY_API_KEY"
-            echo -e "${GREEN}✓ Claude Code configurado!${RESET}"
+        SETTINGS_FILE="$HOME/.claude/settings.json"
+        mkdir -p "$HOME/.claude"
+
+        if [ -f "$SETTINGS_FILE" ]; then
+            # Merge: inject/overwrite the "env" key at the top level using Python
+            python3 - "$SETTINGS_FILE" "$PROXY_API_KEY" "${SERVER_HOST}:8000" << 'PYEOF'
+import sys, json, collections
+
+settings_path = sys.argv[1]
+auth_token    = sys.argv[2]
+base_url      = "http://" + sys.argv[3]
+
+with open(settings_path, "r") as f:
+    data = json.load(f, object_pairs_hook=collections.OrderedDict)
+
+env_block = collections.OrderedDict([
+    ("ANTHROPIC_AUTH_TOKEN", auth_token),
+    ("ANTHROPIC_MODEL",      "claude-sonnet-4-6"),
+    ("ANTHROPIC_BASE_URL",   base_url),
+])
+
+# Merge with any existing env keys (new keys win)
+existing_env = data.pop("env", collections.OrderedDict())
+existing_env.update(env_block)
+
+# Rebuild with env first
+new_data = collections.OrderedDict([("env", existing_env)])
+new_data.update(data)
+
+with open(settings_path, "w") as f:
+    json.dump(new_data, f, indent=2)
+    f.write("\n")
+PYEOF
         else
-            echo -e "${YELLOW}Aviso: comando 'claude' não encontrado. Configure manualmente:${RESET}"
-            echo -e "${DIM}  claude config set -g apiBaseUrl \"http://${SERVER_HOST}:8000\"${RESET}"
-            echo -e "${DIM}  claude config set -g apiKey \"$PROXY_API_KEY\"${RESET}"
+            # Create fresh settings.json
+            cat > "$SETTINGS_FILE" << EOF
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "$PROXY_API_KEY",
+    "ANTHROPIC_MODEL": "claude-sonnet-4-6",
+    "ANTHROPIC_BASE_URL": "http://${SERVER_HOST}:8000"
+  }
+}
+EOF
         fi
+
+        echo -e "${GREEN}✓ Claude Code configurado em $SETTINGS_FILE!${RESET}"
         echo ""
     fi
 fi

@@ -460,14 +460,20 @@ CODEX_AUTH_FILE: str = os.getenv("CODEX_AUTH_FILE", "~/.codex/auth.json")
 _CODEX_ENABLED_RAW: str = os.getenv("CODEX_ENABLED", "true").lower()
 CODEX_ENABLED: bool = _CODEX_ENABLED_RAW not in ("false", "0", "no", "disabled", "off")
 # Codex reasoning effort level.
-_CODEX_REASONING_EFFORT_RAW: str = os.getenv("CODEX_REASONING_EFFORT", "low").lower()
-if _CODEX_REASONING_EFFORT_RAW == "max":
-    _CODEX_REASONING_EFFORT_RAW = "xhigh"
-CODEX_REASONING_EFFORT: str = (
-    _CODEX_REASONING_EFFORT_RAW
-    if _CODEX_REASONING_EFFORT_RAW in ("none", "low", "medium", "high", "xhigh")
-    else "low"
-)
+_CODEX_REASONING_EFFORT_RAW: str = os.getenv("CODEX_REASONING_EFFORT", "auto").lower()
+_CODEX_REASONING_EFFORT_MAP: dict = {
+    "concise": "low",
+    "auto": "high",
+    "detailed": "xhigh",
+    # legacy values passed through directly
+    "none": "none",
+    "low": "low",
+    "medium": "medium",
+    "high": "high",
+    "xhigh": "xhigh",
+    "max": "xhigh",
+}
+CODEX_REASONING_EFFORT: str = _CODEX_REASONING_EFFORT_MAP.get(_CODEX_REASONING_EFFORT_RAW, "high")
 
 # List of opening tags to detect thinking blocks.
 # The parser will look for any of these tags at the start of the response.
