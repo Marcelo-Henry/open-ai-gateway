@@ -209,7 +209,7 @@ async def stream_kiro_to_anthropic(
                 full_content += content
                 
                 # Close thinking block if it was open and we're now getting regular content
-                if thinking_block_started and thinking_block_index is not None:
+                if thinking_block_started and thinking_block_index is not None and content:
                     yield format_sse_event("content_block_stop", {
                         "type": "content_block_stop",
                         "index": thinking_block_index
@@ -217,8 +217,8 @@ async def stream_kiro_to_anthropic(
                     thinking_block_started = False
                     current_block_index += 1
                 
-                # Start text block if not started
-                if not text_block_started:
+                # Start text block if not started (only when there's actual content)
+                if not text_block_started and content:
                     text_block_index = current_block_index
                     yield format_sse_event("content_block_start", {
                         "type": "content_block_start",
